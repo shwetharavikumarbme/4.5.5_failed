@@ -1,0 +1,880 @@
+
+
+import React, { useRef, useState, useEffect, useCallback, memo } from 'react';
+import { SafeAreaView, View, FlatList, Image, Alert, TouchableOpacity, Text, RefreshControl, Keyboard, Modal, Animated, findNodeHandle, InteractionManager } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useNavigation, useFocusEffect, useScrollToTop, useNavigationState } from '@react-navigation/native';
+import Video from 'react-native-video';
+import Banner01 from './Banner1';
+import Banner03 from './Banner3';
+import Banner02 from './Banner2';
+
+import { updateCompanyProfile } from './Redux/MyProfile/CompanyProfile_Actions';
+import { useDispatch, useSelector } from 'react-redux';
+import apiClient from './ApiClient';
+
+import useFetchData from './helperComponents.jsx/HomeScreenData';
+import { useNetwork } from './AppUtils/IdProvider';
+import { useConnection } from './AppUtils/ConnectionProvider';
+import { getSignedUrl } from './helperComponents.jsx/signedUrls';
+import { styles } from '../assets/AppStyles';
+import { ForumPostBody } from './Forum/forumBody';
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
+
+const CompanySettingScreen = React.lazy(() => import('./Profile/CompanySettingScreen'));
+const ProductsList = React.lazy(() => import('./Products/ProductsList'));
+const PageView = React.lazy(() => import('./Forum/PagerViewForum'));
+const JobListScreen = React.lazy(() => import('./Job/JobListScreen'));
+
+
+const tabNameMap = {
+  CompanyJobList: "Jobs",
+  Home3: 'Home',
+};
+const tabConfig = [
+  { name: "Home", component: CompanyHomeScreen, focusedIcon: 'home', unfocusedIcon: 'home-outline', iconComponent: Icon },
+  { name: "Jobs", component: JobListScreen, focusedIcon: 'briefcase', unfocusedIcon: 'briefcase-outline', iconComponent: Icon },
+  { name: "Feed", component: PageView, focusedIcon: 'rss', unfocusedIcon: 'rss-box', iconComponent: Icon },
+  { name: "Products", component: ProductsList, focusedIcon: 'shopping', unfocusedIcon: 'shopping-outline', iconComponent: Icon },
+  { name: "Settings", component: CompanySettingScreen, focusedIcon: 'cog', unfocusedIcon: 'cog-outline', iconComponent: Icon },
+];
+
+
+
+const CompanyHomeScreen = React.memo(() => {
+  const { myId, myData } = useNetwork();
+  const { isConnected } = useConnection();
+  const currentRouteName = useNavigationState((state) => {
+    const route = state.routes[state.index];
+
+    return route.name;
+  });
+  const profile = useSelector(state => state.CompanyProfile.profile);
+
+  const dispatch = useDispatch();
+  const navigation = useNavigation();
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const flatListRef = useRef(null);
+  const [isProfileFetched, setIsProfileFetched] = useState(false);
+  const [activeSection, setActiveSection] = useState('jobs');
+  const scrollOffsetY = useRef(new Animated.Value(0)).current;
+
+  const sectionThresholds = {
+    jobs: 234,
+    trendingPosts: 1594,
+    latestPosts: 4247,
+    products: 6692,
+    services: 8817,
+  };
+
+  const sectionPositions = useRef({});
+
+  const sectionRefs = {
+    jobs: useRef(null),
+    trendingPosts: useRef(null),
+    latestPosts: useRef(null),
+    products: useRef(null),
+    services: useRef(null),
+  };
+
+  const measureSections = () => {
+    const flatListHandle = findNodeHandle(flatListRef.current);
+    if (!flatListHandle) {
+     
+      return;
+    }
+
+    Object.entries(sectionRefs).forEach(([key, ref]) => {
+      if (ref.current) {
+
+        ref.current.measureLayout(
+          flatListHandle,
+          (x, y) => {
+            sectionPositions.current[key] = y;
+            console.log(`✅ [${key}] x: ${x}, y: ${y}`);
+          },
+          (err) => {
+         
+          }
+        );
+      } else {
+    
+      }
+    });
+  };
+
+  const allFetched = !isFetchingJobs &&
+    !isFetchingTrendingPosts &&
+    !isFetchingLatestPosts &&
+    !isFetchingProducts &&
+    !isFetchingServices;
+
+  useEffect(() => {
+    if (!allFetched) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      console.log('📏 All data fetched. Waiting 300ms to measure sections...');
+      setTimeout(() => {
+        measureSections();
+      }, 2000); // wait for FlatList + nested lists to render
+    });
+    
+
+    return () => task.cancel();
+  }, [allFetched, jobs, trendingPosts, latestPosts, products, services]);
+
+
+
+
+  const handleScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollOffsetY } } }],
+    {
+      useNativeDriver: true,
+      listener: (event) => {
+        const offsetY = event.nativeEvent.contentOffset.y;
+        console.log('offsetY', offsetY);
+
+        const entries = Object.entries(sectionPositions.current); // ✅ Correct: this contains actual Y offsets
+
+        for (let i = entries.length - 1; i >= 0; i--) {
+          const [section, threshold] = entries[i];
+          if (offsetY >= threshold) {
+            setActiveSection(section);
+            break;
+          }
+        }
+      },
+    }
+  );
+
+
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await apiClient.post('getUnreadNotificationCount', {
+          command: 'getUnreadNotificationCount',
+          user_id: myId,
+        });
+
+        if (response.status === 200) {
+
+          setUnreadCount(response.data.count);
+
+        }
+      } catch (error) {
+
+      }
+    };
+
+    fetchUnreadCount();
+
+    const intervalId = setInterval(() => {
+      fetchUnreadCount();
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [myId]);
+
+
+  const handleRefresh = async () => {
+    if (isConnected) {
+      setIsRefreshing(true);
+      await refreshData();
+      setIsRefreshing(false);
+    }
+  };
+
+  const renderJobCard = ({ item }) => {
+
+    if (!item || item.isEmpty) return null;
+
+    const { post_id, job_title, experience_required, Package } = item;
+    const imageUrl = jobImageUrls?.[item.post_id]
+    return (
+      <TouchableOpacity
+        onPress={() => navigation.navigate("JobDetail", { post_id, imageUrl })}
+        activeOpacity={0.85}
+        style={styles.eduCard}
+      >
+        <View style={styles.eduCardLeft}>
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.eduImage}
+          />
+        </View>
+
+        <View style={styles.eduCardRight}>
+          <Text numberOfLines={1} style={styles.eduTitle}>
+            {job_title || "Job Title"}
+          </Text>
+          <Text style={styles.eduSubText}>
+            <Text style={styles.label}>Experience: </Text>
+            {experience_required?.slice(0, 15) || "N/A"}
+          </Text>
+          <Text style={styles.eduSubText}>
+            <Text style={styles.label}>Package: </Text>
+            {Package || 'Not disclosed'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+
+  const renderForumCard = ({ item }) => {
+
+    const rawHtml = (item.forum_body || '').trim();
+    const hasHtmlTags = /<\/?[a-z][\s\S]*>/i.test(rawHtml);
+    const forumBodyHtml = hasHtmlTags ? rawHtml : `<p>${rawHtml}</p>`;
+
+    if (!item || !item.forum_id) return null;
+
+    const imageUrl = trendingImageUrls?.[item.forum_id] || latestImageUrls?.[item.forum_id];
+    const isVideo = item.fileKey?.endsWith('.mp4');
+    const isImage = /\.(jpg|jpeg|png|gif|bmp|svg|webp|tiff)$/i.test(item.fileKey || '');
+
+    const formattedPostedTime = new Date(item.posted_on * 1000).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+
+    return (
+      <TouchableOpacity
+        style={styles.heroCard}
+        activeOpacity={0.9}
+        onPress={() => navigation.navigate("Comment", { forum_id: item.forum_id })}
+      >
+        {isVideo ? (
+          <Video
+            source={{ uri: imageUrl }}
+            style={styles.heroImage}
+            resizeMode="cover"
+            muted
+            paused
+          />
+        ) : (
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.heroImage}
+            resizeMode="cover"
+          />
+        )}
+        <View style={styles.overlay}>
+          <View style={styles.overlayHeader}>
+            <Text numberOfLines={1} style={styles.metaLine}>
+              <Text style={styles.metaLabel}>Author: </Text>
+              <Text style={styles.metaValue}>{item.author || 'Unknown'}</Text>
+            </Text>
+
+            <Text style={styles.metaDate}>{formattedPostedTime}</Text>
+          </View>
+
+          <ForumPostBody
+            html={forumBodyHtml}
+            forumId={item?.forum_id}
+            numberOfLines={2}
+
+          />
+
+        </View>
+
+      </TouchableOpacity>
+    );
+  };
+
+  const renderProductCard = ({ item }) => {
+    if (!item || !item.product_id) return null;
+
+    const imageUrl = productImageUrls?.[item.product_id]
+    return (
+      <TouchableOpacity
+        style={styles.card5}
+        activeOpacity={1}
+        onPress={() => handleAddProduct(item)}
+      >
+
+        <View style={styles.companyImageContainer}>
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.companyImage}
+            resizeMode='contain'
+
+          />
+        </View>
+
+        <View style={styles.cardContent4}>
+          <Text numberOfLines={1} style={styles.eduTitle}>
+            {item.title || ' '}
+          </Text>
+
+          <Text style={styles.eduSubText}>
+            <Text style={styles.label}>model_name: </Text>
+            {item.specifications.model_name || ' '}
+          </Text>
+
+          <Text numberOfLines={4} style={styles.eduSubText}>
+            <Text style={styles.label}>description: </Text>
+            ₹{item.description || ' '}
+          </Text>
+
+          <Text style={styles.eduSubText}>
+            <Text style={styles.label}>company_name: </Text>
+            {item.company_name || ' '}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderServiceCard = ({ item }) => {
+    if (!item || !item.service_id) return null;
+
+    const imageUrl = servicesImageUrls?.[item.service_id]
+
+    return (
+      <TouchableOpacity
+        style={styles.card5}
+        activeOpacity={1}
+        onPress={() => handleAddservice(item)}
+      >
+
+        <View style={styles.companyImageContainer}>
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.companyImage}
+            resizeMode='contain'
+
+          />
+        </View>
+
+        <View style={styles.cardContent4}>
+          <Text numberOfLines={1} style={styles.eduTitle}>
+            {item.title || ' '}
+          </Text>
+
+          <Text style={styles.eduSubText}>
+            <Text style={styles.label}>model_name: </Text>
+            {item.specifications.model_name || ' '}
+          </Text>
+
+          <Text numberOfLines={4} style={styles.eduSubText}>
+            <Text style={styles.label}>description: </Text>
+            {item.description || ' '}
+          </Text>
+
+          <Text style={styles.eduSubText}>
+            <Text style={styles.label}>company_name: </Text>
+            {item.company_name || ' '}
+          </Text>
+          {(item.price ?? '').toString().trim() !== '' ? (
+            <View style={styles.priceRow}>
+              <Text numberOfLines={1} style={styles.price}>₹ {item.price}</Text>
+            </View>
+          ) : (
+            <Text style={styles.eduSubText}>₹ Not specified</Text>
+          )}
+        </View>
+
+      </TouchableOpacity>
+    );
+  };
+
+
+
+  const {
+    jobs,
+    latestPosts,
+    trendingPosts,
+    products,
+    services,
+    isFetchingProducts,
+    isFetchingServices,
+    isFetchingJobs,
+    isFetchingLatestPosts,
+    isFetchingTrendingPosts,
+    jobImageUrls,
+    latestImageUrls,
+    trendingImageUrls,
+    productImageUrls,
+    servicesImageUrls,
+    refreshData,
+
+  } = useFetchData({ shouldFetch: isProfileFetched });
+
+
+  useEffect(() => {
+    fetchProfile();
+  }, [myId]);
+
+
+  const allJobs = () => {
+    navigation.navigate('Jobs');
+  };
+
+  const allProducts = () => {
+    navigation.navigate('Products');
+  };
+
+  const allServices = () => {
+    navigation.navigate('Services');
+  };
+
+  const handleAddservice = (service) => {
+    setTimeout(() => {
+      navigation.navigate('ServiceDetails', { service_id: service.service_id, company_id: service.company_id });
+
+    }, 100);
+  };
+
+  const handleAddProduct = (product) => {
+    setTimeout(() => {
+      navigation.navigate('ProductDetails', { product_id: product.product_id, company_id: product.company_id });
+
+    }, 100);
+  };
+
+
+  const fetchProfile = async () => {
+    try {
+
+      const response = await apiClient.post('/getCompanyDetails', {
+        command: 'getCompanyDetails',
+        company_id: myId,
+      });
+
+      if (response.data.status === 'success') {
+        const profileData = response.data.status_message;
+
+        if (profileData.fileKey?.trim()) {
+          try {
+            const res = await getSignedUrl('profileImage', profileData.fileKey);
+
+            const signedUrl = res?.profileImage;
+            profileData.imageUrl = signedUrl || null;
+
+          } catch (imageErr) {
+            profileData.imageUrl = null;
+          }
+        } else {
+          profileData.imageUrl = null;
+        }
+
+        // 📄 Handle brochure
+        if (profileData.brochureKey?.trim()) {
+          try {
+            const brochureRes = await getSignedUrl('brochureFile', profileData.brochureKey);
+            const signedBrochureUrl = brochureRes?.[profileData.brochureKey];
+            profileData.brochureUrl = signedBrochureUrl || null;
+          } catch (brochureErr) {
+            profileData.brochureUrl = null;
+          }
+        } else {
+          profileData.brochureUrl = null;
+        }
+
+        dispatch(updateCompanyProfile(profileData));
+      } else {
+      }
+    } catch (error) {
+      dispatch(updateCompanyProfile(null));
+    } finally {
+      setIsProfileFetched(true);
+    }
+  };
+
+
+
+
+  const handleProfile = () => {
+    if (!isConnected) {
+
+      return;
+    }
+    navigation.navigate("Settings");
+  };
+
+
+
+  const handleMenuPress = () => {
+    if (!isConnected) {
+      return;
+    }
+    const parentNavigation = navigation.getParent();
+    if (parentNavigation?.openDrawer) {
+      parentNavigation.openDrawer();
+    }
+  };
+
+  const scrollToSection = (section) => {
+    const offset = sectionPositions.current[section] || 0;
+    flatListRef.current.scrollToOffset({ offset, animated: true });
+
+  };
+  const sectionKeys = {
+    Jobs: 'jobs',
+    Trending: 'trendingPosts',
+    Latest: 'latestPosts',
+    Products: 'products',
+    Services: 'services',
+  };
+
+  const tabFlatListRef = useRef(null);
+  const tabLabels = Object.keys(sectionKeys); // e.g., ['Jobs', 'Trending', ...]
+  useEffect(() => {
+    const index = tabLabels.findIndex(label => sectionKeys[label] === activeSection);
+    if (index !== -1 && tabFlatListRef.current) {
+      tabFlatListRef.current.scrollToIndex({
+        index,
+        animated: true,
+        viewPosition: 0.5,
+      });
+    }
+  }, [activeSection]);
+
+
+
+  const renderTab = (label) => {
+    const section = sectionKeys[label];
+    const isActive = activeSection === section;
+
+    return (
+      <View style={styles.tabWrapper} key={label}>
+        <TouchableOpacity
+          onPress={() => scrollToSection(section)}
+          activeOpacity={0.85}
+          style={[styles.tab, isActive && styles.activeTab]}
+        >
+          <Text style={[styles.tabText, isActive && styles.activeTabText]}>
+            {label}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+
+  return (
+    <SafeAreaView style={{ backgroundColor: 'whitesmoke', flex: 1 }}>
+
+      <View style={styles.headerContainer}>
+
+        <TouchableOpacity onPress={handleMenuPress} >
+          <Icon name="menu" size={30} color="black" />
+        </TouchableOpacity>
+
+        <View style={styles.rightContainer}>
+          <TouchableOpacity
+            style={styles.notificationContainer}
+            onPress={() => navigation.navigate('AllNotification', { userId: myId })}
+          >
+            <Icon name="bell-outline" size={26} color="black" />
+            {unreadCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationText}>{unreadCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={handleProfile} style={styles.profileContainer} activeOpacity={0.8}>
+            <View style={styles.detailImageWrapper}>
+              <Image
+                source={{ uri: profile?.imageUrl }}
+                style={styles.detailImage}
+                resizeMode="cover"
+                onError={() => {
+                  console.log('Image load error — switching to fallback.');
+
+                }}
+              />
+
+            </View>
+          </TouchableOpacity>
+
+        </View>
+
+      </View>
+
+      <AnimatedFlatList
+        showsVerticalScrollIndicator={false}
+        ref={flatListRef}
+        onScroll={handleScroll}
+        onMomentumScrollEnd={() => {
+          InteractionManager.runAfterInteractions(() => {
+            measureSections(); // re-measure now that layout is likely stable
+          });
+        }}
+
+        scrollEventThrottle={16}
+        stickyHeaderIndices={[1]}
+        onScrollBeginDrag={() => Keyboard.dismiss()}
+        contentContainerStyle={{ paddingBottom: '20%', backgroundColor: 'whitesmoke' }}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+        data={[
+          { type: 'banner1' },
+          { type: 'tabs' }, // 👈 This is now sticky!
+          { type: 'jobs', data: jobs },
+          { type: 'banner2' },
+          { type: 'trendingPosts', data: trendingPosts },
+          { type: 'banner3' },
+          { type: 'latestPosts', data: latestPosts },
+          { type: 'products', data: products },
+          { type: 'services', data: services },
+        ]}
+
+
+
+        renderItem={({ item }) => {
+          switch (item.type) {
+
+            case 'banner1':
+              return <Banner01 />;
+
+            case 'tabs':
+              return (
+                <View style={styles.tabScrollWrapper}>
+                  <FlatList
+                    horizontal
+                    ref={tabFlatListRef}
+                    data={tabLabels}
+                    renderItem={({ item }) => renderTab(item)}
+                    keyExtractor={(item) => item}
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.tabListContent}
+                    getItemLayout={(data, index) => ({
+                      length: 90,
+                      offset: 90 * index,
+                      index,
+                    })}
+                    scrollToIndexFailed={({ index }) => {
+                      setTimeout(() => {
+                        tabFlatListRef.current?.scrollToIndex({ index, animated: true });
+                      }, 200);
+                    }}
+                  />
+                </View>
+              );
+
+            case 'jobs':
+              return (
+                <View activeOpacity={1} style={styles.cards} ref={sectionRefs.jobs}
+                  onLayout={(e) => {
+                    const { y } = e.nativeEvent.layout;
+                    sectionPositions.current.jobs = y;
+                    console.log('📏 [jobs] onLayout y:', y);
+                  }}
+                >
+
+                  <>
+                    <View style={styles.headingContainer}
+                    >
+                      <Text style={styles.heading}>
+                        Jobs  <Icon name="briefcase" size={19} color="#075cab" />
+                      </Text>
+                      <TouchableOpacity onPress={allJobs}>
+                        <Text style={styles.seeAllText}>See more</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <FlatList
+                      data={jobs}
+                      renderItem={({ item }) => renderJobCard({ item })}
+                      keyExtractor={(item) => `job-${item.post_id}`}
+                    />
+                  </>
+
+                </View>
+              );
+
+            case 'banner2':
+              return <Banner02 />;
+
+            case 'trendingPosts':
+              return (
+
+                <View activeOpacity={1} style={styles.cards} ref={sectionRefs.trendingPosts}
+                  onLayout={(e) => {
+                    const { y } = e.nativeEvent.layout;
+                    sectionPositions.current.trendingPosts = y;
+                    console.log('📏 [trendingPosts] onLayout y:', y);
+                  }}
+                >
+
+                  <>
+
+
+                    <Text style={styles.heading}>
+                      Trending posts  <Icon name="flash" size={19} color="#075cab" />
+                    </Text>
+
+                    <FlatList
+                      key={'trending-columns'}
+                      data={trendingPosts}
+                      renderItem={({ item }) => renderForumCard({ item })}
+                      keyExtractor={(item, index) => item.forum_id?.toString() || item.post_id?.toString() || `fallback-${index}`}
+                      showsVerticalScrollIndicator={false}
+
+                    />
+
+
+                  </>
+
+
+                </View>
+              );
+
+            case 'banner3':
+              return <Banner03 />;
+
+            case 'latestPosts':
+              return (
+
+                <View activeOpacity={1} style={styles.cards} ref={sectionRefs.latestPosts}
+                  onLayout={(e) => {
+                    const { y } = e.nativeEvent.layout;
+                    sectionPositions.current.latestPosts = y;
+                    console.log('📏 [latestPosts] onLayout y:', y);
+                  }}
+                >
+
+                  <>
+                    <Text style={styles.heading}>
+                      Latest posts  <Icon name="message" size={19} color="#075cab" />
+                    </Text>
+
+                    <FlatList
+                      key={'latest-columns'}
+                      data={latestPosts}
+                      renderItem={({ item }) => renderForumCard({ item })}
+                      keyExtractor={(item, index) => item.forum_id?.toString() || item.post_id?.toString() || `latest-${index}`}
+                      showsVerticalScrollIndicator={false}
+                    />
+                  </>
+
+                </View>
+              );
+            case 'products':
+              return (
+                <View activeOpacity={1} style={styles.cards} ref={sectionRefs.products}
+                  onLayout={(e) => {
+                    const { y } = e.nativeEvent.layout;
+                    sectionPositions.current.products = y;
+                    console.log('📏 [products] onLayout y:', y);
+                  }}
+                >
+
+                  <>
+                    <View style={styles.headingContainer} >
+                      <Text style={styles.heading}>
+                        Products  <Icon name="shopping" size={19} color="#075cab" />
+                      </Text>
+                      <TouchableOpacity onPress={allProducts}>
+                        <Text style={styles.seeAllText}>See more</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <FlatList
+                      data={products}
+                      renderItem={({ item }) => renderProductCard({ item })}
+                      keyExtractor={(item) => `product-${item.product_id}`}
+                      numColumns={2}
+                      contentContainerStyle={styles.flatListContainer}
+                      columnWrapperStyle={styles.columnWrapper}
+                    />
+                  </>
+
+                </View>
+              );
+
+            case 'services':
+              return (
+                <View activeOpacity={1} style={styles.cards} ref={sectionRefs.services}
+                  onLayout={(e) => {
+                    const { y } = e.nativeEvent.layout;
+                    sectionPositions.current.services = y;
+                    console.log('📏 [services] onLayout y:', y);
+                  }}
+                >
+
+                  <>
+                    <View style={styles.headingContainer} ref={sectionRefs.services}>
+                      <Text style={styles.heading}>
+                        Services  <Icon name="tools" size={19} color="#075cab" />
+                      </Text>
+                      <TouchableOpacity onPress={allServices}>
+                        <Text style={styles.seeAllText}>See more</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <FlatList
+                      data={services}
+                      renderItem={({ item }) => renderServiceCard({ item })}
+                      keyExtractor={(item) => `service-${item.service_id}`}
+                      numColumns={2}
+                      contentContainerStyle={styles.flatListContainer}
+                      columnWrapperStyle={styles.columnWrapper}
+                    />
+                  </>
+
+                </View>
+              );
+
+            default:
+              return null;
+          }
+        }}
+
+        keyExtractor={(item, index) => `${item.type || 'unknown'}-${index}`}
+      />
+
+      <View style={styles.bottomNavContainer}>
+        {tabConfig.map((tab, index) => {
+
+          const isFocused = tabNameMap[currentRouteName] === tab.name;
+
+          return (
+            <TouchableOpacity
+              key={index}
+              onPress={() => {
+                const targetTab = tab.name;
+
+                if (isFocused) {
+                  if (scrollOffsetY.current > 0) {
+                    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+
+                    setTimeout(() => {
+                      handleRefresh();
+                    }, 300);
+                  } else {
+                    handleRefresh();
+                  }
+                } else {
+                  navigation.navigate(targetTab);
+                }
+              }}
+              style={styles.navItem}
+              activeOpacity={0.8}
+
+            >
+              <tab.iconComponent
+                name={isFocused ? tab.focusedIcon : tab.unfocusedIcon}
+                size={22}
+                color={isFocused ? '#075cab' : 'black'}
+
+              />
+              <Text style={[styles.navText, { color: isFocused ? '#075cab' : 'black' }]}>
+                {tab.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+
+    </SafeAreaView>
+  );
+
+});
+
+
+export default CompanyHomeScreen;
