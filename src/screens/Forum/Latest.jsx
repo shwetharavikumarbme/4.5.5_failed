@@ -537,7 +537,6 @@ console.log(localPosts[0])
           )
         )}
 
-
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 10 }}>
           <View>
             <TouchableOpacity
