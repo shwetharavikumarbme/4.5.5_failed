@@ -8,14 +8,15 @@ import { COLORS } from '../../assets/Constants';
 import FastImage from 'react-native-fast-image';
 import apiClient from '../ApiClient';
 import { setJobImageUrls, updateOrAddJobPosts } from '../Redux/Job_Actions';
-import { useDispatch, useSelector } from 'react-redux';
+import { useSelector } from 'react-redux';
 import Fuse from 'fuse.js';
 import { useNetwork } from '../AppUtils/IdProvider';
 import { showToast } from '../AppUtils/CustomToast';
 import { useConnection } from '../AppUtils/ConnectionProvider';
 import AppStyles from '../../assets/AppStyles';
-import { getSignedUrl } from '../helperComponents.jsx/signedUrls';
+import { getSignedUrl, highlightMatch, useLazySignedUrls } from '../helperComponents.jsx/signedUrls';
 import buliding from '../../images/homepage/buliding.jpg';
+import { EventRegister } from 'react-native-event-listeners';
 const Company = Image.resolveAssetSource(buliding).uri;
 
 
@@ -45,7 +46,7 @@ const JobListScreen = () => {
   const parentNavigation = navigation.getParent();
   const currentRouteName = parentNavigation?.getState()?.routes[parentNavigation.getState().index]?.name;
 
-  const dispatch = useDispatch();
+
   const { myId } = useNetwork();
   const { isConnected } = useConnection();
 
@@ -54,53 +55,7 @@ const JobListScreen = () => {
   const jobImageUrls = useSelector(state => state.jobs.jobImageUrls);
   const storeProfile = useSelector(state => state.CompanyProfile.profile);
 
-  const [allJobsData, setAllJobsData] = useState([]);
 
-  const getFuzzySuggestions = (inputText) => {
-    const fuse = new Fuse(allJobsData, {
-      keys: ['company_name', 'job_title'],
-      threshold: 0.5,
-      distance: 100,
-    });
-
-    const results = fuse.search(inputText);
-    const uniqueMap = new Map();
-
-    results.forEach(res => {
-      const { company_name, job_title } = res.item;
-      const key = `${company_name}|${job_title}`;
-
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, res.item);
-      }
-    });
-
-    return Array.from(uniqueMap.values());
-  };
-
-
-
-  const handleInputChange = (text) => {
-    setSearchQuery(text);
-    setSuggestionsLimit(5);
-
-    if (text.trim() === '') {
-      setSuggestions([]);
-      return;
-    }
-    const matchedSuggestions = getFuzzySuggestions(text);
-    setSuggestions(matchedSuggestions);
-  };
-
-
-
-
-  useEffect(() => {
-    // console.log("Jobs from store: ",jobs);
-    // console.log("jobImageUrls from store: ",jobImageUrls);
-
-    setJobs(jobs);
-  }, [jobs]);
 
   const flatListRef = useRef(null);
   const scrollOffsetY = useRef(0);
@@ -111,19 +66,77 @@ const JobListScreen = () => {
     scrollOffsetY.current = offsetY;
   };
 
-  const [localJobs, setJobs] = useState([]);
+  const [localJobs, setLocalJobs] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [fetchLimit, setFetchLimit] = useState(3);
+  const [fetchLimit, setFetchLimit] = useState(20);
   const [searchResults, setSearchResults] = useState([]);
   const [searchTriggered, setSearchTriggered] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
-  const [suggestionsLimit, setSuggestionsLimit] = useState(5);
+
   const [profile, setProfile] = useState(false)
   const [hasMoreJobs, setHasMoreJobs] = useState(true);
   const [loading, setLoading] = useState(false);
   const [profileCreated, setProfileCreated] = useState(false)
+
+  useEffect(() => {
+    const onJobCreated = async (data) => {
+      const { newPost } = data;
+
+      try {
+        const signedMap = await getSignedUrl(newPost.post_id, newPost.fileKey || '');
+        const imageUrl = signedMap[newPost.post_id] || Company;
+
+        const jobWithImage = { ...newPost, imageUrl };
+
+        setLocalJobs(prevJobs => {
+          const filtered = prevJobs.filter(job => job.post_id !== jobWithImage.post_id);
+          return [jobWithImage, ...filtered];
+        });
+      } catch (err) {
+
+      }
+    };
+
+    const onJobUpdated = async (data) => {
+      const { updatedPost } = data;
+
+      try {
+        const signedMap = await getSignedUrl(updatedPost.post_id, updatedPost.fileKey || '');
+        const imageUrl = signedMap[updatedPost.post_id] || Company;
+
+        const updatedJobWithImage = { ...updatedPost, imageUrl };
+
+        setLocalJobs(prevJobs =>
+          prevJobs.map(job =>
+            String(job.post_id) === String(updatedPost.post_id) ? { ...job, ...updatedJobWithImage } : job
+          )
+        );
+      } catch (err) {
+
+      }
+    };
+
+    const onJobDeleted = (data) => {
+      const { postId } = data;
+
+      setLocalJobs(prevJobs =>
+        prevJobs.filter(job => String(job.post_id) !== String(postId))
+      );
+    };
+
+    const createdListener = EventRegister.addEventListener('onJobPostCreated', onJobCreated);
+    const updatedListener = EventRegister.addEventListener('onJobUpdated', onJobUpdated);
+    const deletedListener = EventRegister.addEventListener('onJobDeleted', onJobDeleted);
+
+    return () => {
+      EventRegister.removeEventListener(createdListener);
+      EventRegister.removeEventListener(updatedListener);
+      EventRegister.removeEventListener(deletedListener);
+    };
+  }, []);
+
+
 
   const fetchProfile1 = async () => {
     try {
@@ -141,7 +154,7 @@ const JobListScreen = () => {
       );
 
       if (response.data.status === 'error') {
-console.log('response.data.status',response.data)
+        console.log('response.data.status', response.data)
         setProfileCreated(false);
 
       } else if (response.data.status === 'success') {
@@ -242,12 +255,10 @@ console.log('response.data.status',response.data)
       fetchProfile1();
     }, [])
   );
-  
+
 
   const navigateToDetails = (job) => {
-    const imageUrl = jobImageUrls?.[job.post_id] ;
-    const hasRealImage = Boolean(jobImageUrls?.[job.post_id]);
-    navigation.navigate("JobDetail", { post_id: job.post_id, imageUrl, hasRealImage });
+    navigation.navigate("JobDetail", { post_id: job.post_id, post: job });
   };
 
   const withTimeout = (promise, timeout = 10000) => {
@@ -257,14 +268,13 @@ console.log('response.data.status',response.data)
     ]);
   };
 
+  const [companyCount, setCompanyCount] = useState(0);
+
   const fetchJobs = async (lastEvaluatedKey = null) => {
-    if (!isConnected) {
-
-      return;
-    }
+    if (!isConnected) return;
     if (loading || loadingMore) return;
-    lastEvaluatedKey ? setLoadingMore(true) : setLoading(true);
 
+    lastEvaluatedKey ? setLoadingMore(true) : setLoading(true);
     const startTime = Date.now();
 
     try {
@@ -275,16 +285,22 @@ console.log('response.data.status',response.data)
       };
 
       const res = await withTimeout(apiClient.post('/getAllJobPosts', requestData), 10000);
-
       const jobs = res.data.response || [];
-
-      dispatch(updateOrAddJobPosts(jobs));
+      setCompanyCount(res.data.count);
 
       if (!jobs.length) {
         setLastEvaluatedKey(null);
         setHasMoreJobs(false);
         return;
       }
+
+      // Append new jobs to localJobs state
+      setLocalJobs(prevJobs => {
+        const existingIds = new Set(prevJobs.map(job => job.post_id));
+        const newUniqueJobs = jobs.filter(job => !existingIds.has(job.post_id));
+        return [...prevJobs, ...newUniqueJobs];
+      });
+
 
       setLastEvaluatedKey(res.data.lastEvaluatedKey || null);
       setHasMoreJobs(!!res.data.lastEvaluatedKey);
@@ -296,52 +312,13 @@ console.log('response.data.status',response.data)
         setFetchLimit(prev => Math.max(prev - 2, 1));
       }
 
-      const urlPromises = jobs.map(job =>
-        getSignedUrl(job.post_id, job.fileKey)
-      );
-      const signedUrlsArray = await Promise.all(urlPromises);
-  
-      const rawSignedUrlMap = Object.assign({}, ...signedUrlsArray);
-  
-      const signedUrlMap = Object.entries(rawSignedUrlMap).reduce((acc, [id, url]) => {
-        acc[id] = url || Company;
-        return acc;
-      }, {});
-  
-      dispatch({
-        type: 'SET_JOB_IMAGE_URLS',
-        payload: signedUrlMap,
-      });
-
     } catch (error) {
-      setLoading(false);
 
     } finally {
       setLoading(false);
       setLoadingMore(false);
-
     }
   };
-
-  const fetchAllJobPosts = async () => {
-    try {
-      const requestData = { command: 'getAllJobPosts' };
-      const res = await apiClient.post('/getAllJobPosts', requestData);
-      const jobPosts = res?.data?.response || [];
-
-      setAllJobsData(jobPosts);
-
-    } catch (error) {
-
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-  useEffect(() => {
-    fetchAllJobPosts();
-  }, []);
 
 
   useEffect(() => {
@@ -349,6 +326,17 @@ console.log('response.data.status',response.data)
     fetchJobs();
 
   }, []);
+
+
+  const {
+    getUrlFor,
+    onViewableItemsChanged,
+    viewabilityConfig
+  } = useLazySignedUrls(localJobs, getSignedUrl, 5, {
+    idField: 'post_id',
+    fileKeyField: 'fileKey',
+  });
+
 
 
 
@@ -370,23 +358,15 @@ console.log('response.data.status',response.data)
 
     setSearchQuery('');
     setSearchTriggered(false);
-    setSuggestions([]);
     setSearchResults([]);
     setLastEvaluatedKey(null);
-    if (jobs.length > 0) {
-      setJobs([]);
-    }
-
-    dispatch({ type: 'CLEAR_JOB_POSTS' });
-
-    setJobs([]);
 
     setHasMoreJobs(true);
     setLastEvaluatedKey(null);
     setNewJobCount(0);
     setShowNewJobAlert(false);
     updateLastCheckedTime(Math.floor(Date.now() / 1000));
-
+    setLocalJobs([])
     await fetchJobs();
 
     setIsRefreshing(false);
@@ -399,69 +379,77 @@ console.log('response.data.status',response.data)
 
 
 
-  const handleSearch = async (text) => {
+  const handleSearch = useCallback(async (text) => {
     if (!isConnected) {
-      showToast('No internet connection', 'error')
+      showToast('No internet connection', 'error');
       return;
     }
-    setSearchQuery(text);
-    if (text?.trim() === '') {
 
+    setSearchQuery(text);
+
+    if (text.trim() === '') {
+      setSearchResults([]);
       return;
     }
-    setSearchTriggered(true);
-    setLoading(true);
-    setSuggestions([]);
 
     try {
       const requestData = {
         command: "searchJobPosts",
         searchQuery: text,
-
       };
-      const res = await withTimeout(apiClient.post('/searchJobPosts', requestData), 10000);
 
+      const res = await withTimeout(apiClient.post('/searchJobPosts', requestData), 10000);
       const jobs = res.data.response || [];
-      setSearchResults(jobs);
+
+      // Get signed URLs
       const urlPromises = jobs.map(job =>
         getSignedUrl(job.post_id, job.fileKey)
       );
 
       const signedUrlsArray = await Promise.all(urlPromises);
+      const rawSignedUrlMap = Object.assign({}, ...signedUrlsArray);
 
-      const signedUrlMap = Object.assign({}, ...signedUrlsArray);
+      // Embed imageUrl into each job
+      const jobsWithImage = jobs.map(job => ({
+        ...job,
+        imageUrl: rawSignedUrlMap[job.post_id] || Company,
+      }));
 
-      dispatch({
-        type: 'SET_JOB_IMAGE_URLS',
-        payload: signedUrlMap,
-      });
+      setSearchResults(jobsWithImage);
 
     } catch (error) {
 
     } finally {
+      setSearchTriggered(true);
 
-      setLoading(false);
     }
-  };
+  }, [isConnected]);
 
 
+  const debounceTimeout = useRef(null);
 
-  const getSlicedTitle = (title) => {
-    const maxLength = 35;
-    if (title.length > maxLength) {
-      return title.slice(0, maxLength).trim() + '...';
+  const handleDebouncedTextChange = useCallback((text) => {
+    setSearchQuery(text);
+
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
     }
-    return title;
-  };
 
+    const trimmedText = text.trim();
 
-  const getSlicedTitle1 = (title) => {
-    const maxLength = 25;
-    if (title.length > maxLength) {
-      return title.slice(0, maxLength).trim() + '...';
+    if (trimmedText === '') {
+      setSearchTriggered(false);
+      setSearchResults([]);
+      return;
     }
-    return title;
-  };
+
+    debounceTimeout.current = setTimeout(() => {
+      handleSearch(trimmedText);  // Call actual search function
+    }, 300);
+  }, [handleSearch]);
+
+
+
 
 
   const shareJob = async (job) => {
@@ -497,7 +485,8 @@ console.log('response.data.status',response.data)
 
 
   const renderJob = ({ item: job }) => {
-    const imageUrl = jobImageUrls[job.post_id];
+    const imageUrl = getUrlFor(job.post_id);
+
     const resizeMode = imageUrl?.includes('buliding.jpg') ? 'cover' : 'contain';
 
     return (
@@ -509,7 +498,8 @@ console.log('response.data.status',response.data)
         >
           <View style={styles.cardImage1}>
             <FastImage
-              source={{ uri: imageUrl }}
+              source={{ uri: imageUrl, priority: FastImage.priority.normal }}
+              cache="immutable"
               style={styles.cardImage}
               resizeMode={resizeMode}
               onError={() => { }}
@@ -517,7 +507,9 @@ console.log('response.data.status',response.data)
           </View>
 
           <View style={styles.textContainer}>
-            <Text style={styles.title1}>{getSlicedTitle(job.job_title || "")}</Text>
+            <Text numberOfLines={1} style={styles.title1}>
+              {highlightMatch(job.job_title || '', searchQuery)}
+            </Text>
 
             <View style={styles.detailContainer}>
               <View style={styles.lableIconContainer}>
@@ -525,11 +517,11 @@ console.log('response.data.status',response.data)
                 <Text style={styles.label}>Company</Text>
               </View>
               <Text style={styles.colon}>:</Text>
-              <Text style={styles.value}>
-                <TouchableOpacity onPress={() => handleNavigate(job.company_id)}>
-                  <Text style={styles.companyName}>{getSlicedTitle1(job.company_name || "")}</Text>
-                </TouchableOpacity>
-              </Text>
+
+              <TouchableOpacity onPress={() => handleNavigate(job.company_id)} style={styles.value} activeOpacity={0.8}>
+                <Text numberOfLines={1} style={styles.companyName}>{highlightMatch(job.company_name || '', searchQuery)}</Text>
+              </TouchableOpacity>
+
             </View>
 
             <View style={styles.detailContainer}>
@@ -538,18 +530,24 @@ console.log('response.data.status',response.data)
                 <Text style={styles.label}>Package</Text>
               </View>
               <Text style={styles.colon}>:</Text>
-              <Text style={styles.value}>{getSlicedTitle1(job.Package || "")}</Text>
+              <Text numberOfLines={1} style={styles.value}>{highlightMatch(job.Package || "", searchQuery)}</Text>
             </View>
 
             <View style={styles.detailContainer}>
               <View style={styles.lableIconContainer}>
                 <Icon name="map-marker" size={20} color="black" style={styles.icon} />
                 <Text style={styles.label}>Location</Text>
+
               </View>
               <Text style={styles.colon}>:</Text>
-              <Text style={styles.value}>
-                {`${getSlicedTitle1(job.company_located_state || "")}, ${job.company_located_city}`}
+              <Text numberOfLines={1} style={styles.value}>
+                {highlightMatch(
+                  `${job.company_located_state || ""}, ${job.company_located_city || ""}`,
+                  searchQuery,
+                )}
+
               </Text>
+
             </View>
 
             <View style={styles.buttonContainer}>
@@ -581,18 +579,9 @@ console.log('response.data.status',response.data)
                 placeholder="Search"
                 placeholderTextColor="gray"
                 value={searchQuery}
-                onChangeText={handleInputChange}
-                onSubmitEditing={() => {
-                  if (searchQuery.trim() !== '') {
-                    handleSearch(searchQuery);
-                    setSearchTriggered(true);
-                    setSuggestions([]);
-
-                    searchInputRef.current?.blur();
-                  }
-                }}
-                returnKeyType="search"
+                onChangeText={handleDebouncedTextChange}
               />
+
 
               {searchQuery.trim() !== '' ? (
                 <TouchableOpacity
@@ -600,24 +589,16 @@ console.log('response.data.status',response.data)
                     setSearchQuery('');
                     setSearchTriggered(false);
                     setSearchResults([]);
-                    setSuggestions([]);
 
                   }}
+                  activeOpacity={0.8}
                   style={AppStyles.iconButton}
                 >
                   <Icon name="close-circle" size={20} color="gray" />
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  // onPress={() => {
-                  //   if (searchQuery.trim() !== '') {
-                  //     handleSearch(searchQuery);
-                  //     setSearchTriggered(true);
-                  //     setSuggestions([]);
-                  //     searchInputRef.current?.blur();
-
-                  //   }
-                  // }}
+                  activeOpacity={1}
                   style={AppStyles.searchIconButton}
                 >
                   <Icon name="magnify" size={20} color="#075cab" />
@@ -662,108 +643,71 @@ console.log('response.data.status',response.data)
         )}
 
 
-        {suggestions.length > 0 && (
-
-          <ScrollView
-            style={styles.suggestionContainer}
+        {!loading ? (
+          <FlatList
+            data={!searchTriggered ? localJobs : searchResults}
+            renderItem={({ item }) => renderJob({ item })}
+            ref={flatListRef}
+            onScroll={event => {
+              handleScroll(event);
+              Keyboard.dismiss();
+              searchInputRef.current?.blur?.();
+            }}
+            scrollEventThrottle={16}
+            onScrollBeginDrag={() => {
+              Keyboard.dismiss();
+              searchInputRef.current?.blur?.();
+            }}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ backgroundColor: '#fff' }}
-          >
-            {suggestions.slice(0, suggestionsLimit).map((item, index) => (
-              <TouchableOpacity
-                key={index}
-                onPress={() => {
-                  setSearchQuery(`${item.company_name} - ${item.job_title}`);
-                  handleSearch(item.company_name, item.job_title);
-                  setSuggestions([]);
-                  setSuggestionsLimit(5);
-                  searchInputRef.current?.blur();
-                }}
-                style={styles.suggestionItem}
-              >
-                <Text style={styles.suggestionTitle}>{`${item.company_name}`}</Text>
-                <Text style={styles.suggestionJob}>{`${item.job_title}`}</Text>
-
-              </TouchableOpacity>
-            ))}
-
-
-            {suggestions.length > suggestionsLimit && (
-              <TouchableOpacity
-                onPress={() => setSuggestionsLimit(suggestionsLimit + 5)}
-                style={styles.loadMoreButton}
-              >
-                <Text style={styles.loadMoreText}>Load More</Text>
-              </TouchableOpacity>
-            )}
-          </ScrollView>
-
-        )}
-
-
-        <TouchableWithoutFeedback
-          onPress={() => {
-            Keyboard.dismiss();
-            searchInputRef.current?.blur?.();
-            setSuggestions([]);
-          }}
-        >
-
-          {!loading ? (
-            <FlatList
-              data={!searchTriggered || searchQuery.trim() === '' ? jobs : searchResults}
-              renderItem={({ item }) => renderJob({ item })}
-              ref={flatListRef}
-              onScroll={event => {
-                handleScroll(event);
-                Keyboard.dismiss();
-                searchInputRef.current?.blur?.();
-                setSuggestions([]);
-              }}
-              scrollEventThrottle={16}
-              onScrollBeginDrag={() => {
-                Keyboard.dismiss();
-                searchInputRef.current?.blur?.();
-                setSuggestions([]);
-              }}
-              keyboardShouldPersistTaps="handled"
-              keyExtractor={(item, index) => `${item.post_id}-${index}`}
-              contentContainerStyle={styles.scrollView}
-              onEndReached={() => !searchQuery && hasMoreJobs && fetchJobs(lastEvaluatedKey)}
-              onEndReachedThreshold={0.5}
-              showsVerticalScrollIndicator={false}
-              ListEmptyComponent={
-                (searchTriggered && searchResults.length === 0) ? (
-                  <View style={{ alignItems: 'center', marginTop: 40 }}>
-                    <Text style={{ fontSize: 16, color: '#666' }}>No jobs found</Text>
-                  </View>
-                ) : null
-              }
-              ListHeaderComponent={
-                <>
-                  {searchTriggered && searchResults.length > 0 && (
+            keyExtractor={(item, index) => `${item.post_id}-${index}`}
+            contentContainerStyle={styles.scrollView}
+            onEndReached={() => !searchQuery && hasMoreJobs && fetchJobs(lastEvaluatedKey)}
+            onEndReachedThreshold={0.5}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              (searchTriggered && searchResults.length === 0) ? (
+                <View style={{ alignItems: 'center', marginTop: 40 }}>
+                  <Text style={{ fontSize: 16, color: '#666' }}>No jobs found</Text>
+                </View>
+              ) : null
+            }
+            ListHeaderComponent={
+              <View>
+                {!loading && (
+                  <>
                     <Text style={styles.companyCount}>
-                      {searchResults.length} results found
+                      {searchTriggered ? `${searchResults.length} jobs found` : `${companyCount} jobs found`}
                     </Text>
-                  )}
-                </>
-              }
-              ListFooterComponent={
-                loadingMore ? (
-                  <ActivityIndicator size="small" color="#075cab" style={{ marginVertical: 20 }} />
-                ) : null
-              }
-              refreshControl={
-                <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
-              }
-            />
-          ) : (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-              <ActivityIndicator color={'#075cab'} size="large" />
-            </View>
-          )}
 
-        </TouchableWithoutFeedback>
+                    {searchTriggered && searchResults.length > 0 && (
+                      <Text style={styles.companyCount}>
+                        Showing results for{" "}
+                        <Text style={{ fontSize: 18, fontWeight: '600', color: '#075cab' }}>
+                          "{searchQuery}"
+                        </Text>
+                      </Text>
+                    )}
+                  </>
+                )}
+              </View>
+            }
+
+            ListFooterComponent={
+              loadingMore ? (
+                <ActivityIndicator size="small" color="#075cab" style={{ marginVertical: 20 }} />
+              ) : null
+            }
+            refreshControl={
+              <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+            }
+          />
+        ) : (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator color={'#075cab'} size="large" />
+          </View>
+        )}
 
       </View>
 
@@ -815,48 +759,6 @@ console.log('response.data.status',response.data)
 };
 
 const styles = StyleSheet.create({
-  suggestionContainer: {
-    position: 'absolute',
-    top: 50, // adjust depending on your header/search bar height
-    width: '95%',
-    alignSelf: 'center',
-    maxHeight: '45%',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingVertical: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 999,
-  },
-  suggestionItem: {
-    padding: 7,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-
-  loadMoreButton: {
-    padding: 12,
-    alignItems: 'center',
-
-  },
-
-  loadMoreText: {
-    color: '#075cab',
-    fontWeight: 'bold',
-  },
-
-  suggestionTitle: {
-    fontSize: 14,
-    color: 'black'
-  },
-  suggestionJob: {
-    fontSize: 12,
-    color: '#888'
-  },
-
 
   bottomNavContainer: {
     flexDirection: 'row',
@@ -903,11 +805,11 @@ const styles = StyleSheet.create({
   },
 
   companyCount: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '400',
     color: 'black',
-    padding: 5
-
+    padding: 5,
+    paddingHorizontal: 15,
   },
 
 

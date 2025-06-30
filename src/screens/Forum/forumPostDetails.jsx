@@ -45,7 +45,7 @@ import { getSignedUrl, getTimeDisplay } from '../helperComponents.jsx/signedUrls
 import { openMediaViewer } from '../helperComponents.jsx/mediaViewer';
 import { ForumReactions } from '../helperComponents.jsx/ForumReactions';
 import ReactionSheet, { ReactionUserSheet } from '../helperComponents.jsx/ReactionUserSheet';
-import { ForumBody } from './forumBody';
+import { ForumBody, normalizeHtml } from './forumBody';
 
 
 const screenHeight = Dimensions.get('window').height;
@@ -367,17 +367,6 @@ const CommentScreen = ({ route }) => {
   };
 
   const [expandedTexts, setExpandedTexts] = useState({});
-  const rawHtml = (post?.forum_body || '').trim();
-  const hasHtmlTags = /<\/?[a-z][\s\S]*>/i.test(rawHtml);
-  const forumBodyHtml = hasHtmlTags ? rawHtml : `<p>${rawHtml}</p>`;
-
-
-  const getText1 = (text) => {
-    if (showFullText || text.length <= 200) {
-      return text; // Show full text if toggled or if it's short enough
-    }
-    return text.slice(0, 200) + ' ...';
-  };
 
   const videoExtensions = [
     '.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.webm',
@@ -498,7 +487,7 @@ const CommentScreen = ({ route }) => {
 
           <View style={{ paddingHorizontal: 10 }}>
             <ForumBody
-              html={forumBodyHtml}
+             html={normalizeHtml(post?.forum_body)}
               forumId={post?.forum_id}
               isExpanded={expandedTexts[post?.forum_id]}
               toggleFullText={toggleFullText}

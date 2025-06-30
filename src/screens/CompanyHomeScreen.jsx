@@ -739,15 +739,15 @@ const CompanyHomeScreen = React.memo(() => {
                 const targetTab = tab.name;
 
                 if (isFocused) {
-                  if (scrollOffsetY.current > 0) {
-                    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                  // if (scrollOffsetY.current > 0) {
+                  //   flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
 
-                    setTimeout(() => {
-                      handleRefresh();
-                    }, 300);
-                  } else {
-                    handleRefresh();
-                  }
+                  //   setTimeout(() => {
+                  //     handleRefresh();
+                  //   }, 300);
+                  // } else {
+                  //   handleRefresh();
+                  // }
                 } else {
                   navigation.navigate(targetTab);
                 }

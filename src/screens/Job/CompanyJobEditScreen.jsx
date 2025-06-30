@@ -18,6 +18,7 @@ import { showToast } from '../AppUtils/CustomToast';
 import apiClient from '../ApiClient';
 import { useNetwork } from '../AppUtils/IdProvider';
 import AppStyles from '../../assets/AppStyles';
+import { EventRegister } from 'react-native-event-listeners';
 
 const CompanyJobEditScreen = ({ route }) => {
   const { myId, myData } = useNetwork();
@@ -174,23 +175,23 @@ const CompanyJobEditScreen = ({ route }) => {
         required_qualifications: jobEditFormData.required_qualifications?.trim() || "",
         preferred_languages: jobEditFormData.preferred_languages?.trim() || ""
       };
-
+  
       for (const [key, value] of Object.entries(trimmedData)) {
         if (key !== "preferred_languages" && !value) {
           showToast(`${key.replace(/_/g, " ")} is mandatory`, 'info');
           return;
         }
       }
-
+  
       setHasChanges(false);
-
-      const existingJob = jobs.find(job => job.post_id === post.post_id);
-
+  
+      const existingJob = jobs.find(job => String(job.post_id) === String(post.post_id));
+  
       const updatedJobData = {
         ...existingJob,
-        ...trimmedData, // Only update the fields that have changed
+        ...trimmedData,
       };
-
+  
       apiClient.post("/updateAJobPost", {
         command: "updateJobPost",
         company_id: myId,
@@ -199,9 +200,18 @@ const CompanyJobEditScreen = ({ route }) => {
       })
         .then(() => {
           showToast("Job post updated successfully", 'success');
-
+  
+          EventRegister.emit('onJobUpdated', {
+            updatedPost: {
+              ...updatedJobData,
+              post_id: post.post_id,           // ✅ Ensure post_id is present
+              fileKey: post.fileKey || "",     // ✅ Optional but recommended
+            },
+          });
+          
+  
           dispatch(updateJobPost(updatedJobData));
-
+  
           setTimeout(() => {
             navigation.goBack();
           }, 100);
@@ -210,9 +220,11 @@ const CompanyJobEditScreen = ({ route }) => {
           showToast("You don't have an internet connection", 'error');
         });
     } catch (error) {
+      console.error('Edit error', error);
       showToast('Something went wrong', 'error');
     }
   };
+  
 
 
 

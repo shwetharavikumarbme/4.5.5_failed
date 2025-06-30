@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Image, StyleSheet, TextInput, Text, TouchableOpacity, Modal, ScrollView, SafeAreaView, RefreshControl, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import axios from 'axios';
@@ -18,15 +18,15 @@ import apiClient from '../ApiClient';
 import { useNetwork } from '../AppUtils/IdProvider';
 import useLastActivityTracker from '../AppUtils/LastSeenProvider';
 import { updateLastSeen } from '../AppUtils/LastSeen';
-
+import { OtpInput } from "react-native-otp-entry";
+import { openMediaViewer } from '../helperComponents.jsx/mediaViewer';
 
 const UserProfileScreen = () => {
   const navigation = useNavigation();
   const profile = useSelector(state => state.CompanyProfile.profile);
   const { myId } = useNetwork();
 
-  const [imageUrl, setImageUrl] = useState(null);
-  const [isModalVisibleImage, setModalVisibleImage] = useState(false);
+
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [messageVisible, setMessageVisible] = useState(false);
@@ -36,7 +36,8 @@ const UserProfileScreen = () => {
   const [isResendEnabled, setIsResendEnabled] = useState(true);
   const [timer, setTimer] = useState(30);
   const [step, setStep] = useState(1);
-  const [otp, setOtp] = useState('');
+  const [otp, setOTP] = useState('');
+  const otpRef = useRef('');
   const [phoneNumber, setPhoneNumber] = useState(profile?.user_phone_number);
 
 
@@ -49,16 +50,6 @@ const UserProfileScreen = () => {
     }
   }, [timer]);
 
-  const toggleModal = useCallback(() => {
-    const disallowedImages = ['female.jpg', 'dummy.png', 'buliding.jpg'];
-    const imageUrl = profile?.imageUrl || '';
-
-    const isDisallowed = disallowedImages.some(name => imageUrl.includes(name));
-
-    if (!isDisallowed) {
-      setModalVisibleImage(!isModalVisibleImage);
-    }
-  }, [isModalVisibleImage, profile?.imageUrl]);
 
   const sendOtp = (phoneNumber) => {
     axios
@@ -119,34 +110,38 @@ const UserProfileScreen = () => {
     }
   };
 
-  const handleVerifyOTP = () => {
-    if (otp.length !== 6 || !/^\d+$/.test(otp)) {
+  const handleVerifyOTP = async () => {
+    const enteredOTP = otpRef.current;
+    console.log('Entered OTP:', enteredOTP);
 
+    if (enteredOTP.length !== 6 || !/^\d{6}$/.test(enteredOTP)) {
       showToast("Please enter a valid 6 digit OTP", 'error');
       return;
     }
 
-    axios
-      .post(
+    try {
+      const res = await axios.post(
         'https://h7l1568kga.execute-api.ap-south-1.amazonaws.com/dev/verifyOtpMsg91',
-        { command: 'verifyOtpMsg91', otp, user_phone_number: phoneNumber },
-        { headers: { 'x-api-key': 'k1xuty5IpZ2oHOEOjgMz57wHfdFT8UQ16DxCFkzk' } }
-      )
-      .then((res) => {
-        if (res.data.type === 'success') {
-          handleDeleteAccount();
-        } else {
-
-          showToast("OTP doesn't match", 'error');
-
+        {
+          command: 'verifyOtpMsg91',
+          otp: enteredOTP, // ✅ use correct OTP value
+          user_phone_number: phoneNumber,
+        },
+        {
+          headers: {
+            'x-api-key': 'k1xuty5IpZ2oHOEOjgMz57wHfdFT8UQ16DxCFkzk',
+          },
         }
-      })
-      .catch((error) => {
+      );
 
-        showToast(error.message, 'error');
-
-
-      });
+      if (res.data.type === 'success') {
+        await handleDeleteAccount(); // ✅ added `await` in async context
+      } else {
+        showToast("OTP doesn't match", 'error');
+      }
+    } catch (error) {
+      showToast("Try again later", 'error');
+    }
   };
 
   const resendHandle = async () => {
@@ -178,10 +173,10 @@ const UserProfileScreen = () => {
 
   const handleMessageOk = async () => {
     if (!messageTitle) return;
-  
+
     try {
       console.log("[Logout] Logout process started...");
-  
+
       // Retrieve session data
       const sessionData = await AsyncStorage.getItem('userSession');
       if (!sessionData) {
@@ -189,29 +184,29 @@ const UserProfileScreen = () => {
         showToast("Session not found", 'error');
         return;
       }
-  
+
       const parsedSessionData = JSON.parse(sessionData);
       if (!parsedSessionData?.sessionId) {
         console.warn("[Logout] sessionId missing in parsed session data.");
         showToast("Session not found", 'error');
         return;
       }
-  
+
       const payload = {
         command: 'logoutUserSession',
         session_id: parsedSessionData.sessionId,
       };
-  
+
       console.log("[Logout] Sending logout API request to /logoutUserSession...");
       console.log("[Logout] Payload:", payload);
-  
+
       const response = await apiClient.post(
         'https://h7l1568kga.execute-api.ap-south-1.amazonaws.com/dev/logoutUserSession',
         payload
       );
-  
+
       console.log("[Logout] API Response:", response?.data);
-  
+
       if (response?.data?.statusCode === 200) {
         showToast("Logout successful", 'success');
       } else {
@@ -219,25 +214,25 @@ const UserProfileScreen = () => {
         showToast('Logout Failed: ' + response.data.message, 'error');
         return;
       }
-  
+
       if (myId) {
         console.log("[Logout] Updating last seen for user:", myId);
         await updateLastSeen(myId, new Date().toISOString()); // ✅ use directly
-      }      
+      }
 
-  
+
       console.log("[Logout] Clearing session-related AsyncStorage items...");
       await AsyncStorage.multiRemove([
         'normalUserData',
         'NormalUserlogintimeData',
         'userSession',
       ]);
-  
+
       console.log("[Logout] Restarting app...");
       setTimeout(() => {
         RNRestart.Restart();
       }, 500);
-  
+
     } catch (error) {
       console.error("[Logout] Error occurred during logout:", error?.message || error);
       showToast("Please check your connection", 'error');
@@ -245,16 +240,10 @@ const UserProfileScreen = () => {
       setMessageVisible(false);
     }
   };
-  
+
 
   const handleMessageCancel = () => {
     setMessageVisible(false); // Close modal without any action
-  };
-
-  const handleCancel = () => {
-    toggleModal();
-    navigation.navigate('UserProfile', { profile, imageUrl });
-
   };
 
 
@@ -272,7 +261,7 @@ const UserProfileScreen = () => {
   const handleYesClick = () => {
     setStep(2);
     sendOtp(phoneNumber);
-    setOtp('');
+    setOTP('');
     setTimer(30);
     setIsResendEnabled(false);
 
@@ -304,224 +293,231 @@ const UserProfileScreen = () => {
       </View>
 
       <ScrollView keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}  >
-      
-          <View style={styles.imageContainer}>
-            <TouchableOpacity onPress={toggleModal} activeOpacity={1}>
-              <FastImage
-                source={{ uri: profile?.imageUrl }}
-                style={styles.detailImage}
-                resizeMode={FastImage.resizeMode.cover}
-                onError={() => { }}
-              />
-            </TouchableOpacity>
-          </View>
 
-          <View style={styles.profileBox}>
+        <View style={styles.imageContainer}>
+          <TouchableOpacity activeOpacity={1} onPress={() => openMediaViewer([{ type: 'image', url: profile?.imageUrl }])}>
+            <FastImage
+              source={{ uri: profile?.imageUrl }}
+              style={styles.detailImage}
+              resizeMode={FastImage.resizeMode.cover}
+              onError={() => { }}
+            />
+          </TouchableOpacity>
+        </View>
 
-            <Text style={[styles.title1, { textAlign: 'center', marginBottom: 20 }]}>
-              {`${(profile?.first_name || '').trim()} ${(profile?.last_name || '').trim()}`}
-            </Text>
+        <View style={styles.profileBox}>
 
-            <View style={styles.textContainer}>
-              <View style={styles.title}>
-                <Text style={styles.label}>Email ID   </Text>
-                <Text style={styles.colon}>:</Text>
+          <Text style={[styles.title1, { textAlign: 'center', marginBottom: 20 }]}>
+            {`${(profile?.first_name || '').trim()} ${(profile?.last_name || '').trim()}`}
+          </Text>
 
-                <Text style={styles.value}>{(profile?.user_email_id || "").trimStart().trimEnd()}
-                  <Text>{profile.is_email_verified && (
-                    <Ionicons name="checkmark-circle" size={12} color="green" />
-                  )}</Text>
-                </Text>
+          <View style={styles.textContainer}>
+            <View style={styles.title}>
+              <Text style={styles.label}>Email ID   </Text>
+              <Text style={styles.colon}>:</Text>
 
-              </View>
-
-              <View style={styles.title}>
-                <Text style={styles.label}>Phone no.        </Text>
-                <Text style={styles.colon}>:</Text>
-
-                <Text style={styles.value}>{profile?.user_phone_number || ""}</Text>
-              </View>
-
-              <View style={styles.title}>
-                <Text style={styles.label}>Profile           </Text>
-                <Text style={styles.colon}>:</Text>
-
-                <Text style={styles.value}>{profile?.select_your_profile || ""}</Text>
-              </View>
-              <View style={styles.title}>
-                <Text style={styles.label}>Category         </Text>
-                <Text style={styles.colon}>:</Text>
-
-                <Text style={styles.value}>{profile?.category || ""}</Text>
-              </View>
-              <View style={styles.title}>
-                <Text style={styles.label}>State               </Text>
-                <Text style={styles.colon}>:</Text>
-
-                <Text style={styles.value}>{profile?.state || ""}</Text>
-              </View>
-              <View style={styles.title}>
-                <Text style={styles.label}>City          </Text>
-                <Text style={styles.colon}>:</Text>
-
-                <Text style={styles.value}>{profile?.city || ""}</Text>
-              </View>
-              <View style={styles.title}>
-                <Text style={styles.label}>Gender</Text>
-                <Text style={styles.colon}>:</Text>
-                <Text style={styles.value}>{profile?.gender || ""}</Text>
-              </View>
-
-              <View style={styles.title}>
-                <Text style={styles.label}>Date of birth </Text>
-                <Text style={styles.colon}>:</Text>
-                <Text style={styles.value}>{profile?.date_of_birth ? (profile?.date_of_birth) : ""}</Text>
-              </View>
-
-              {(profile?.college?.trimStart().trimEnd()) ? (
-                <View style={styles.title}>
-                  <Text style={styles.label}>Institute / Company</Text>
-                  <Text style={styles.colon}>:</Text>
-                  <Text style={styles.value}>{profile?.college.trimStart().trimEnd()}</Text>
-                </View>
-              ) : null}
+              <Text style={styles.value}>{(profile?.user_email_id || "").trimStart().trimEnd()}
+                <Text>{profile.is_email_verified && (
+                  <Ionicons name="checkmark-circle" size={12} color="green" />
+                )}</Text>
+              </Text>
 
             </View>
 
+            <View style={styles.title}>
+              <Text style={styles.label}>Phone no.        </Text>
+              <Text style={styles.colon}>:</Text>
 
-            <TouchableOpacity style={styles.signOutButton} onPress={handleLogout}>
-              <Icon name="exit-to-app" size={20} color="#075cab" />
-              <Text style={styles.signOutButtonText}>Logout</Text>
-            </TouchableOpacity>
+              <Text style={styles.value}>{profile?.user_phone_number || ""}</Text>
+            </View>
 
-            <TouchableOpacity style={styles.deleteAccountButton} onPress={handleDeleteClick} >
-              <Icon name="account-remove-outline" size={24} color="red" style={styles.icon} />
-              <Text style={styles.deleteAccountButtonText} >Delete account</Text>
-            </TouchableOpacity>
+            <View style={styles.title}>
+              <Text style={styles.label}>Profile           </Text>
+              <Text style={styles.colon}>:</Text>
 
-            {messageVisible && (
-              <Message
-                visible={messageVisible}
-                title={messageTitle}
-                message={messageText}
-                iconType={messageIconType}
-                onCancel={handleMessageCancel}
-                onOk={handleMessageOk} // Always pass the function
-              />
-            )}
+              <Text style={styles.value}>{profile?.select_your_profile || ""}</Text>
+            </View>
+            <View style={styles.title}>
+              <Text style={styles.label}>Category         </Text>
+              <Text style={styles.colon}>:</Text>
 
-            <Modal
-              visible={isModalVisible}
-              onRequestClose={() => {
-                setIsModalVisible(false);
-                setOtp(''); // Reset OTP when modal is closed
-              }}
+              <Text style={styles.value}>{profile?.category || ""}</Text>
+            </View>
+            <View style={styles.title}>
+              <Text style={styles.label}>State               </Text>
+              <Text style={styles.colon}>:</Text>
 
-              transparent={true}
-              animationType="fade"
-            >
-              <View style={styles.modalBackground}>
-                <View style={styles.modalContainer}>
-                  <TouchableOpacity onPress={() => {
-                    setIsModalVisible(false)
-                    setOtp('');
-                    setTimer(null);
-                  }}
-                    style={styles.closeIconContainer}>
-                    <Ionicons name="close" size={24} color="black" />
-                  </TouchableOpacity>
-                  {step === 1 ? (
+              <Text style={styles.value}>{profile?.state || ""}</Text>
+            </View>
+            <View style={styles.title}>
+              <Text style={styles.label}>City          </Text>
+              <Text style={styles.colon}>:</Text>
 
-                    <>
-                      <View style={styles.warningContainer}>
-                        <Ionicons name="warning" size={30} color="orange" />
-                      </View>
-                      <Text style={styles.modalTitle}>Confirm Deletion</Text>
-                      <Text style={styles.deletionText}>
-                        Are you sure you want to delete your account?{'\n\n'}By
-                        confirming, you will permanently lose all data associated with
-                        this account within 5 business days, including your posts in the feed, comments, uploaded files (images,
-                        videos, documents), and transaction details. This action is irreversible. {'\n\n'}
-                        <Text style={styles.deletionText1}>Do you wish to proceed?</Text>
+              <Text style={styles.value}>{profile?.city || ""}</Text>
+            </View>
+            <View style={styles.title}>
+              <Text style={styles.label}>Gender</Text>
+              <Text style={styles.colon}>:</Text>
+              <Text style={styles.value}>{profile?.gender || ""}</Text>
+            </View>
+
+            <View style={styles.title}>
+              <Text style={styles.label}>Date of birth </Text>
+              <Text style={styles.colon}>:</Text>
+              <Text style={styles.value}>{profile?.date_of_birth ? (profile?.date_of_birth) : ""}</Text>
+            </View>
+
+            {(profile?.college?.trimStart().trimEnd()) ? (
+              <View style={styles.title}>
+                <Text style={styles.label}>Institute / Company</Text>
+                <Text style={styles.colon}>:</Text>
+                <Text style={styles.value}>{profile?.college.trimStart().trimEnd()}</Text>
+              </View>
+            ) : null}
+
+          </View>
+
+
+          <TouchableOpacity style={styles.signOutButton} onPress={handleLogout}>
+            <Icon name="exit-to-app" size={20} color="#075cab" />
+            <Text style={styles.signOutButtonText}>Logout</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.deleteAccountButton} onPress={handleDeleteClick} >
+            <Icon name="account-remove-outline" size={24} color="red" style={styles.icon} />
+            <Text style={styles.deleteAccountButtonText} >Delete account</Text>
+          </TouchableOpacity>
+
+          {messageVisible && (
+            <Message
+              visible={messageVisible}
+              title={messageTitle}
+              message={messageText}
+              iconType={messageIconType}
+              onCancel={handleMessageCancel}
+              onOk={handleMessageOk} // Always pass the function
+            />
+          )}
+
+          <Modal
+            visible={isModalVisible}
+            onRequestClose={() => setIsModalVisible(false)}
+            transparent={true}
+            animationType="slidein"
+          >
+            <View style={styles.modalBackground}>
+              <View style={styles.modalContainer1}>
+                <TouchableOpacity onPress={() => {
+                  setIsModalVisible(false);
+                  setOTP('');
+                  setTimer(null);
+                }} style={styles.closeIconContainer}>
+                  <Text style={styles.closeText}>✕</Text>
+                </TouchableOpacity>
+                {step === 1 ? (
+
+                  <>
+                    <View style={styles.warningContainer}>
+                      <Ionicons name="warning" size={30} color="orange" />
+                    </View>
+                    <Text style={styles.modalTitle}>Confirm Deletion</Text>
+                    <Text style={styles.deletionText}>
+                      Are you sure you want to delete your account?{'\n\n'}By
+                      confirming, you will permanently lose all data associated with
+                      this account within 5 business days, including your posts in the feed, comments, uploaded files (images,
+                      videos, documents), and transaction details. This action is irreversible. {'\n\n'}
+                      <Text style={styles.deletionText1}>Do you wish to proceed?</Text>
+                    </Text>
+                    <View style={styles.buttonContainer}>
+                      <TouchableOpacity
+                        style={styles.confirmButton}
+                        onPress={handleYesClick}
+                      >
+                        <Text style={styles.confirmButtonText}>Yes</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={handleNoClick}
+                      >
+                        <Text style={styles.cancelButtonText}>No</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+
+                  <>
+                    <View style={styles.scrollViewContainer} showsVerticalScrollIndicator={false}>
+
+                      <Text style={styles.infoText}>
+                        Enter the OTP sent to: {phoneNumber}
                       </Text>
-                      <View style={styles.buttonContainer}>
-                        <TouchableOpacity
-                          style={styles.confirmButton}
-                          onPress={handleYesClick}
-                        >
-                          <Text style={styles.confirmButtonText}>Yes</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.cancelButton}
-                          onPress={handleNoClick}
-                        >
-                          <Text style={styles.cancelButtonText}>No</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </>
-                  ) : (
+                      <OtpInput
+                        numberOfDigits={6}
+                        focusColor="#075cab"
+                        autoFocus={true}
+                        // hideStick={true}
+                        placeholder="•"
+                        // blurOnFilled={true}
+                        disabled={false}
+                        type="numeric"
+                        secureTextEntry={false}
+                        focusStickBlinkingDuration={500}
+                        onTextChange={(text) => {
+                          setOTP(text);
+                          otpRef.current = text; // ✅ latest OTP
+                        }}
+                        onFilled={(text) => {
+                          setOTP(text);
+                          otpRef.current = text;
+                          handleVerifyOTP();
+                        }}
 
-                    <>
-                      <Text style={styles.modalTitle1}>Enter the OTP sent to:</Text>
-                      <Text style={{ marginVertical: 10 }}>{phoneNumber}</Text>
-
-                      <TextInput
-                        style={styles.otpInput}
-                        value={otp}
-                        onChangeText={setOtp}
-                        placeholder="Enter OTP"
-                        keyboardType="numeric"
-                        maxLength={6}
-                        placeholderTextColor='gray'
+                        textInputProps={{
+                          accessibilityLabel: "One-Time Password",
+                        }}
+                        textProps={{
+                          accessibilityRole: "text",
+                          accessibilityLabel: "OTP digit",
+                          allowFontScaling: false,
+                        }}
+                        theme={{
+                          containerStyle: styles.otpContainer,
+                          pinCodeContainerStyle: styles.pinCodeContainer,
+                          pinCodeTextStyle: styles.pinCodeText,
+                          focusStickStyle: styles.focusStick,
+                          focusedPinCodeContainerStyle: styles.activePinCodeContainer,
+                          placeholderTextStyle: styles.placeholderText,
+                          filledPinCodeContainerStyle: styles.filledPinCodeContainer,
+                          disabledPinCodeContainerStyle: styles.disabledPinCodeContainer,
+                        }}
                       />
 
-                      <TouchableOpacity style={styles.verifyButton} onPress={handleVerifyOTP}>
-                        <Text style={styles.verifyButtonText}>Verify OTP</Text>
-                      </TouchableOpacity>
 
-                      <View style={styles.resendContainer}>
+                      <View style={styles.actionsRow}>
                         {isResendEnabled ? (
                           <TouchableOpacity onPress={resendHandle} style={styles.resendButton}>
-                            <Text style={styles.verifyButtonText}>Resend OTP</Text>
+                            <Text style={styles.resendButtonText}>Resend OTP</Text>
                           </TouchableOpacity>
                         ) : (
                           <Text style={styles.timerText}>Resend in {timer}s</Text>
                         )}
+
+                        <TouchableOpacity onPress={handleVerifyOTP} style={styles.verifyButton}>
+                          <Text style={styles.resendButtonText}>Verify OTP</Text>
+                        </TouchableOpacity>
                       </View>
-                    </>
-                  )}
-                </View>
-              </View>
-            </Modal>
+                    </View>
 
-            <Modal visible={isModalVisibleImage} transparent={true}>
-              <View style={styles.modalContainerImage}>
-
-                {profile?.imageUrl ? (
-                  <Image
-                    source={{ uri: profile?.imageUrl }}
-                    style={styles.modalImage}
-                    resizeMode='contain'
-                    onError={() => setImageUrl(null)}
-                  />
-                ) : (
-                  <Image
-                    source={defaultImage}
-                    style={styles.modalImage}
-                    resizeMode='contain'
-                  />
+                  </>
                 )}
-
-                <TouchableOpacity onPress={handleCancel} style={styles.closeButton1}>
-                  <Ionicons name="close" size={24} color="white" />
-
-                </TouchableOpacity>
               </View>
-            </Modal>
-          </View>
-   
-      </ScrollView >
+            </View>
+          </Modal>
 
+   
+        </View>
+
+      </ScrollView >
 
     </SafeAreaView >
   );
@@ -712,24 +708,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
 
-  modalBackground: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  modalContainer: {
-    width: '90%',
-    backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  closeIconContainer: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-  },
+
   warningContainer: {
     marginBottom: 10,
   },
@@ -740,18 +719,14 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     textAlign: 'center',
   },
-  modalTitle1: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#333',
-    textAlign: 'center',
-  },
+
   deletionText: {
-    fontSize: 16,
+    fontSize: 14,
     color: 'black',
     textAlign: 'justify',
-    lineHeight: 22,
+    lineHeight: 23,
     marginBottom: 25,
+    fontWeight:'500'
   },
   deletionText1: {
     fontWeight: 'bold',
@@ -787,44 +762,119 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  otpInput: {
-    height: 50,
-    width: '80%',
-    backgroundColor: '#f9f9f9',
-    borderWidth: 1,
-    borderColor: '#ddd',
+
+  closeIconContainer: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 20,
+    width: 25,
+    height: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  closeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+},
+  modalContainer1: {
+    width: '90%',
+    backgroundColor: 'white',
+    padding: 20,
     borderRadius: 10,
-    paddingHorizontal: 15,
+    alignItems: 'center',
+
+  },
+  modalBackground: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+
+  otpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  pinCodeContainer: {
+    borderWidth: 0,
+    borderColor: '#ccc',
+    borderRadius: 10,
+    width: 40,
+    height: 45,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  activePinCodeContainer: {
+    borderColor: '#075cab',
+  },
+  filledPinCodeContainer: {
+    backgroundColor: '#eaf4ff',
+    borderColor: '#075cab',
+  },
+  disabledPinCodeContainer: {
+    backgroundColor: '#f2f2f2',
+  },
+  pinCodeText: {
+    fontSize: 20,
+    color: '#000',
+    fontWeight: '400',
+  },
+  focusStick: {
+    width: 2,
+    height: 25,
+    backgroundColor: '#075cab',
+  },
+  placeholderText: {
+    color: '#aaa',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 20,
+    marginHorizontal: 15
+  },
+
+  resendButtonText: {
+    color: '#075cab',
     fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 20,
-    color: 'black',
+    fontWeight: '600',
+    padding: 10,
+
+  },
+  timerText: {
+    color: '#999',
+    fontSize: 13,
+    padding: 10,
   },
   verifyButton: {
-    // backgroundColor: '#4caf50',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-  },
-  verifyButtonText: {
-    color: '#075cab',
-    fontSize: 15,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  resendContainer: {
-    marginTop: 10,
+    alignSelf: 'flex-end',
   },
   resendButton: {
-    paddingVertical: 5,
-    paddingHorizontal: 15,
+    alignSelf: 'flex-end',
   },
-
-  timerText: {
-    fontSize: 14,
-    color: 'firebrick',
+  infoText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 10,
+    color: '#333',
+    fontWeight: '500'
   },
+  scrollViewContainer: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    paddingBottom: 10,
+    justifyContent: 'flex-start',
 
+  },
 
 });
 

@@ -29,6 +29,7 @@ import { EventRegister } from 'react-native-event-listeners';
 import AppStyles from '../../assets/AppStyles';
 import { actions, RichEditor, RichToolbar } from 'react-native-pell-rich-editor';
 import { decode } from 'html-entities';
+import { cleanForumHtml } from './forumBody';
 
 const videoExtensions = [
   '.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.webm',
@@ -801,24 +802,6 @@ const ForumEditScreen = () => {
 
   const stripHtmlTags = (html) =>
     html?.replace(/<\/?[^>]+(>|$)/g, '').trim() || '';
-
-
-
-  const cleanForumHtml = (html) => {
-    if (!html) return '';
-
-    return html
-      // Remove all inline styles
-      .replace(/(<[^>]+) style="[^"]*"/gi, '$1')
-      // Remove unwanted tags like font, span (but keep content)
-      .replace(/<\/?(font|span|div|p)[^>]*>/gi, '')
-      // Remove empty tags
-      .replace(/<[^\/>][^>]*>\s*<\/[^>]+>/gi, '')
-      // Whitelist only allowed tags: b, i, ul, ol, li, a (and required a href)
-      .replace(/<(?!\/?(b|i|ul|ol|li|a|br)(\s|>|\/))/gi, '&lt;')
-      // Ensure <a> tags retain only href, remove others
-      .replace(/<a [^>]*href="([^"]+)"[^>]*>/gi, '<a href="$1">');
-  };
 
 
   const handleForumBodyChange = (html) => {

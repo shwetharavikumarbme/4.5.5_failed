@@ -19,7 +19,6 @@ import CommentsSection from "../AppUtils/Comments";
 import { useBottomSheet } from "../AppUtils/SheetProvider";
 import CommentInputBar from "../AppUtils/InputBar";
 import { EventRegister } from "react-native-event-listeners";
-import { fetchCommentCount, fetchCommentCounts, fetchMediaForPost, fetchMediaForPosts } from "../AppUtils/CommentCount";
 import { useConnection } from "../AppUtils/ConnectionProvider";
 import AppStyles from "../../assets/AppStyles";
 import { getSignedUrl, getTimeDisplay } from "../helperComponents.jsx/signedUrls";
@@ -27,7 +26,9 @@ import { openMediaViewer } from "../helperComponents.jsx/mediaViewer";
 import { fetchForumReactionsBatch, fetchForumReactionsRaw } from "../helperComponents.jsx/ForumReactions";
 
 import ReactionSheet from "../helperComponents.jsx/ReactionUserSheet";
-import { ForumBody } from "./forumBody";
+import { ForumBody, generateHighlightedHTML } from "./forumBody";
+import { fetchMediaForPost } from "../helperComponents.jsx/forumViewableItems";
+import { fetchCommentCount, fetchCommentCounts } from "../AppUtils/CommentCount";
 
 const width = Dimensions.get('window').width;
 
@@ -43,11 +44,6 @@ const Latest = ({ isPageFocused, scrollRef }) => {
   const posts = useSelector((state) => state.forum.posts);
   const { myId, myData } = useNetwork();
   const { isConnected } = useConnection();
-
-
-  const [allPosts, setAllPosts] = useState();
-  const [suggestions, setSuggestions] = useState([]);
-  const [suggestionsLimit, setSuggestionsLimit] = useState(5);
   const [hasFetchedPosts, setHasFetchedPosts] = useState(false);
   const { openSheet, closeSheet } = useBottomSheet();
   // const commentsCount = useSelector((state) => state.forum.commentsCount);
@@ -55,62 +51,11 @@ const Latest = ({ isPageFocused, scrollRef }) => {
   // const storePosts = useSelector((state) => state.forum.posts);
 
 
-  const fetchAllPosts = async () => {
-    try {
-      const requestData = { command: 'getLatestPosts' };
-      const res = await apiClient.post('/getLatestPosts', requestData);
-      const AllPosts = res?.data?.response || [];
-
-      setAllPosts(AllPosts);
-
-    } catch (error) {
-
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-  const getFuzzySuggestions = (inputText) => {
-    const fuse = new Fuse(allPosts, {
-      keys: ['forum_body'],
-      threshold: 0.5,
-      distance: 100,
-    });
-
-    const results = fuse.search(inputText);
-    const uniqueMap = new Map();
-
-    results.forEach(res => {
-      const { forum_body } = res.item;
-      const key = `${forum_body}`;
-
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, res.item);
-      }
-    });
-
-    return Array.from(uniqueMap.values());
-  };
-
-
-
-  const handleInputChange = (text) => {
-    setSearchQuery(text);
-    setSuggestionsLimit(5);
-
-    if (text.trim() === '') {
-      setSuggestions([]);
-      return;
-    }
-    const matchedSuggestions = getFuzzySuggestions(text);
-    setSuggestions(matchedSuggestions);
-  };
-
   const dispatch = useDispatch();
   const videoRefs = useRef({});
   const navigation = useNavigation();
   const [localPosts, setLocalPosts] = useState([]);
+console.log(localPosts[0])
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeVideo, setActiveVideo] = useState(null);
@@ -165,60 +110,72 @@ const Latest = ({ isPageFocused, scrollRef }) => {
 
   const fetchLatestPosts = async (lastKey = null) => {
     if (!isConnected || loading || loadingMore) return;
-
+  
     const startTime = Date.now();
     lastKey ? setLoadingMore(true) : setLoading(true);
-
+  
     try {
       const requestData = {
         command: 'getLatestPosts',
         limit: fetchLimit,
         ...(lastKey && { lastEvaluatedKey: lastKey }),
       };
-      const response = await withTimeout(apiClient.post('/getLatestPosts', requestData), 10000);
+  
+      const response = await withTimeout(
+        apiClient.post('/getLatestPosts', requestData),
+        10000
+      );
+  
       const newPosts = response?.data?.response || [];
-
+  
       if (!newPosts.length) {
         setHasMorePosts(false);
         return;
       }
-
+  
+      // Adjust fetchLimit based on response speed
       const responseTime = Date.now() - startTime;
       if (responseTime < 500) setFetchLimit(prev => Math.min(prev + 2, 10));
       else if (responseTime > 1200) setFetchLimit(prev => Math.max(prev - 1, 3));
-
+  
       const sortedNewPosts = newPosts.sort((a, b) => b.posted_on - a.posted_on);
       const forumIds = sortedNewPosts.map(p => p.forum_id);
-
-      const [postsWithMedia, commentCounts, reactionMap] = await Promise.all([
+  
+      const [postsWithMedia, reactionMap, commentCountsArray] = await Promise.all([
         fetchMediaForPost(sortedNewPosts),
-        fetchCommentCounts(forumIds),
         fetchForumReactionsBatch(forumIds, myId),
+        Promise.all(forumIds.map(id => fetchCommentCount(id))), // ✅ updated
       ]);
-
+  
+      // Map comment counts to forumIds
+      const commentCounts = {};
+      forumIds.forEach((id, idx) => {
+        commentCounts[id] = commentCountsArray[idx];
+      });
+  
       const postsWithExtras = postsWithMedia.map((post) => {
         const forumId = post.forum_id;
         const reactions = reactionMap[forumId] || {};
-
+  
         return {
           ...post,
           commentCount: commentCounts[forumId] || 0,
-          reactionsCount: reactions.reactionsCount || {}, // ✅ fix
-          totalReactions: reactions.totalReactions || 0,  // ✅ fix
-          userReaction: reactions.userReaction || null,   // ✅ fix
+          reactionsCount: reactions.reactionsCount || {},
+          totalReactions: reactions.totalReactions || 0,
+          userReaction: reactions.userReaction || null,
         };
       });
-
-
-
+  
+      console.log('postsWithExtras', postsWithExtras);
+  
       setLocalPosts(prev => {
         const combined = [...prev, ...postsWithExtras];
-        const unique = combined.filter((p, i, arr) =>
-          i === arr.findIndex(pp => pp.forum_id === p.forum_id)
+        const unique = combined.filter(
+          (p, i, arr) => i === arr.findIndex(pp => pp.forum_id === p.forum_id)
         );
         return unique;
       });
-
+  
       setHasMorePosts(!!response.data.lastEvaluatedKey);
       setLastEvaluatedKey(response.data.lastEvaluatedKey || null);
     } catch (error) {
@@ -228,6 +185,7 @@ const Latest = ({ isPageFocused, scrollRef }) => {
       setLoadingMore(false);
     }
   };
+  
 
 
 
@@ -303,95 +261,8 @@ const Latest = ({ isPageFocused, scrollRef }) => {
     };
   }, []);
 
-
-
-  // const fetchMediaForPost = async (post) => {
-  //   const mediaData = { forum_id: post.forum_id };
-
-  //   const defaultImageUriCompany = Image.resolveAssetSource(companyImage).uri;
-  //   const defaultImageUriFemale = Image.resolveAssetSource(femaleImage).uri;
-  //   const defaultImageUriMale = Image.resolveAssetSource(maleImage).uri;
-
-  //   if (post.fileKey) {
-  //     try {
-  //       const res = await getSignedUrl('file', post.fileKey);
-  //       const url = res?.file;
-
-  //       if (url) {
-  //         mediaData.imageUrl = url;
-
-  //         if (videoExtensions.some(ext => post.fileKey.toLowerCase().endsWith(ext))) {
-  //           mediaData.videoUrl = url;
-
-  //           if (post.thumbnail_fileKey) {
-  //             try {
-  //               const thumbRes = await getSignedUrl('thumb', post.thumbnail_fileKey);
-  //               mediaData.thumbnailUrl = thumbRes?.thumb;
-
-  //               await new Promise(resolve => {
-  //                 Image.getSize(mediaData.thumbnailUrl, (width, height) => {
-  //                   mediaData.aspectRatio = width / height;
-  //                   resolve();
-  //                 }, resolve);
-  //               });
-  //             } catch (error) {
-  //               mediaData.thumbnailUrl = null;
-  //               mediaData.aspectRatio = 1;
-  //             }
-  //           } else {
-  //             mediaData.thumbnailUrl = null;
-  //             mediaData.aspectRatio = 1;
-  //           }
-  //         } else {
-  //           await new Promise(resolve => {
-  //             Image.getSize(url, (width, height) => {
-  //               mediaData.aspectRatio = width / height;
-  //               resolve();
-  //             }, resolve);
-  //           });
-  //         }
-  //       }
-  //     } catch (error) {
-  //       mediaData.imageUrl = null;
-  //       mediaData.videoUrl = null;
-  //     }
-  //   }
-
-  //   let authorImageUrl = null;
-
-  //   if (post.author_fileKey) {
-  //     try {
-  //       const res = await getSignedUrl('author', post.author_fileKey);
-  //       authorImageUrl = res?.author;
-  //     } catch (err) {
-  //       console.warn("Failed to fetch author image:", err);
-  //     }
-  //   }
-
-  //   if (!authorImageUrl) {
-  //     const userType = (post.user_type || '').toLowerCase();
-  //     const authorGender = (post.author_gender || '').toLowerCase();
-
-  //     if (userType === 'company') {
-  //       authorImageUrl = defaultImageUriCompany;
-  //     } else if (userType === 'users' && authorGender === 'female') {
-  //       authorImageUrl = defaultImageUriFemale;
-  //     } else {
-  //       authorImageUrl = defaultImageUriMale;
-  //     }
-  //   }
-
-  //   mediaData.authorImageUrl = authorImageUrl;
-
-  //   return { ...post, ...mediaData };
-  // };
-
-
-
-
   useEffect(() => {
     if (isPageFocused && !hasFetchedPosts) {
-      fetchAllPosts();
       fetchLatestPosts();
       setHasFetchedPosts(true);
     }
@@ -460,34 +331,21 @@ const Latest = ({ isPageFocused, scrollRef }) => {
 
 
   const activeVideoRef = useRef(null);
-
   useEffect(() => {
     activeVideoRef.current = activeVideo;
   }, [activeVideo]);
-
+  
   useEffect(() => {
     if (!isFocused || !isPageFocused) {
-      const current = activeVideoRef.current;
-      if (current) {
-        const videoRef = videoRefs.current[current];
-        if (videoRef?.pause) {
-          videoRef.pause();
-        }
-        setActiveVideo(null);
-      }
+      setActiveVideo(null);
     }
-
+  
     return () => {
-      const current = activeVideoRef.current;
-      if (current) {
-        const videoRef = videoRefs.current[current];
-        if (videoRef?.pause) {
-          videoRef.pause();
-        }
-        setActiveVideo(null);
-      }
+      setActiveVideo(null);
     };
   }, [isFocused, isPageFocused]);
+  
+  
 
 
 
@@ -573,13 +431,6 @@ const Latest = ({ isPageFocused, scrollRef }) => {
 
   const { height: screenHeight } = Dimensions.get('window');
 
-  const scaleAnimMap = useRef(
-    reactionConfig.reduce((acc, { type }) => {
-      acc[type] = new Animated.Value(1);
-      return acc;
-    }, {})
-  ).current;
-  
   const renderItem = useCallback(({ item }) => {
 
     // console.log('Render', item.forum_id, item.totalReactions, item.userReaction);
@@ -590,7 +441,7 @@ const Latest = ({ isPageFocused, scrollRef }) => {
           <TouchableOpacity style={styles.dpContainer1} onPress={() => handleNavigate(item)}
             activeOpacity={0.8}>
             <FastImage
-              source={{ uri: item.authorImageUrl }}
+              source={item.authorImageUrl ? { uri: item.authorImageUrl } : null}
               style={styles.image1}
               onError={() => {
                 // Optional error handling
@@ -621,7 +472,7 @@ const Latest = ({ isPageFocused, scrollRef }) => {
         <View style={{ paddingHorizontal: 10, }}>
 
           <ForumBody
-            html={item.forum_body}
+            html={generateHighlightedHTML(item.forum_body, searchQuery)}
             forumId={item.forum_id}
             isExpanded={expandedTexts[item.forum_id]}
             toggleFullText={toggleFullText}
@@ -633,13 +484,16 @@ const Latest = ({ isPageFocused, scrollRef }) => {
               ref={(ref) => {
                 if (ref) {
                   videoRefs.current[item.forum_id] = ref;
+                } else {
+                  delete videoRefs.current[item.forum_id];
                 }
               }}
+            
               source={{ uri: item.videoUrl }}
               style={{
                 width: '100%',
                 aspectRatio: item.aspectRatio || 16 / 9,
-
+                marginVertical: 5
               }}
               controls
               paused={activeVideo !== item.forum_id}
@@ -655,7 +509,6 @@ const Latest = ({ isPageFocused, scrollRef }) => {
               }}
               maxBitRate={2000000}
               preferredForwardBufferDuration={5}
-
               controlTimeout={2000}
 
             />
@@ -674,6 +527,8 @@ const Latest = ({ isPageFocused, scrollRef }) => {
                 style={{
                   width: '100%',
                   aspectRatio: item.aspectRatio || 1,
+                  marginVertical: 5
+
                 }}
                 resizeMode={FastImage.resizeMode.contain}
               />
@@ -687,7 +542,7 @@ const Latest = ({ isPageFocused, scrollRef }) => {
           <View>
             <TouchableOpacity
               onLongPress={() => {
-                console.log('🟡 Long press detected → showing emoji picker');
+
                 setActiveReactionForumId(prev =>
                   prev === item.forum_id ? null : item.forum_id
                 );
@@ -699,7 +554,6 @@ const Latest = ({ isPageFocused, scrollRef }) => {
                 alignItems: 'center',
               }}
               onPress={async () => {
-                console.log('🟢 onPress triggered → toggle reaction');
 
                 const post = localPosts.find(p => p.forum_id === item.forum_id);
                 const currentReaction = post?.userReaction || 'None';
@@ -725,12 +579,6 @@ const Latest = ({ isPageFocused, scrollRef }) => {
                       newTotal += 1;
                     }
 
-                    console.log('🔄 Updating local post:', {
-                      forum_id: p.forum_id,
-                      newReaction,
-                      newTotal,
-                    });
-
                     return {
                       ...p,
                       userReaction: newReaction,
@@ -746,9 +594,9 @@ const Latest = ({ isPageFocused, scrollRef }) => {
                     user_id: myId,
                     reaction_type: selectedType,
                   });
-                  console.log('✅ Reaction API success');
+
                 } catch (err) {
-                  console.warn('❌ Reaction update failed, reverting...', err);
+
                   setLocalPosts(prev =>
                     prev.map(p => {
                       if (p.forum_id !== item.forum_id) return p;
@@ -774,7 +622,7 @@ const Latest = ({ isPageFocused, scrollRef }) => {
                   </Text>
                 </>
               ) : (
-                <View style={{alignItems:'center',flexDirection:'row',justifyContent:'center', }}>
+                <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'center', }}>
                   <Text style={{ fontSize: 12, color: '#777', marginRight: 6 }}>React: </Text>
                   <Icon name="thumb-up-outline" size={18} color="#999" />
                 </View>
@@ -818,7 +666,7 @@ const Latest = ({ isPageFocused, scrollRef }) => {
                       shadowOpacity: 0.1,
                       shadowRadius: 6,
                       shadowOffset: { width: 0, height: 2 },
-            
+
                     }}
                   >
                     {reactionConfig.map(({ type, emoji, label }) => {
@@ -828,12 +676,6 @@ const Latest = ({ isPageFocused, scrollRef }) => {
                           key={type}
                           onPress={async () => {
                             const selectedType = item.userReaction === type ? 'None' : type;
-
-                            console.log('Updating reaction:', {
-                              forumId: item.forum_id,
-                              userId: myId,
-                              selectedType,
-                            });
 
                             try {
                               await apiClient.post('/addOrUpdateForumReaction', {
@@ -1057,55 +899,137 @@ const Latest = ({ isPageFocused, scrollRef }) => {
   }, [fetchLatestPosts, dispatch]);
 
 
-  const handleSearch = async (text) => {
+  const debounceTimeout = useRef(null);
+
+    const handleDebouncedTextChange = useCallback((text) => {
+      setSearchQuery(text);
+  
+      if (debounceTimeout.current) {
+        clearTimeout(debounceTimeout.current);
+      }
+  
+      const trimmedText = text.trim();
+  
+      if (trimmedText === '') {
+        setSearchTriggered(false);
+        setSearchResults([]);
+        return;
+      }
+      
+      debounceTimeout.current = setTimeout(() => {
+        handleSearch(trimmedText); 
+      }, 300);
+    }, [handleSearch]);
+
+
+  const handleSearch = useCallback(async (text) => {
     if (!isConnected) {
-      showToast('No internet connection', 'error')
+      showToast('No internet connection', 'error');
       return;
     }
-    setSearchQuery(text);
 
+    setSearchQuery(text);
 
     const trimmedText = text.trim();
 
     if (trimmedText === '') {
-
+      setSearchResults([]);
       return;
     }
-    setSearchTriggered(true);
-    setLoading(true);
-    setSuggestions([]);
+
     try {
       const requestData = {
         command: 'searchLatestForumPosts',
         searchQuery: trimmedText,
       };
 
-      const res = await apiClient.post('/searchLatestForumPosts', requestData);
+      const res = await withTimeout(apiClient.post('/searchLatestForumPosts', requestData), 10000);
       const forumPosts = res.data.response || [];
       const count = res.data.count || forumPosts.length;
 
-      // ✅ Reuse existing media fetch function
       const postsWithMedia = await Promise.all(
-        forumPosts.map((post) => fetchMediaForPost(post))
+        forumPosts.map(post => fetchMediaForPost(post))
       );
 
       setSearchResults(postsWithMedia);
       setSearchCount(count);
+
     } catch (error) {
-
+      // Optional: Log or show error
     } finally {
-      setLoading(false);
-    }
+      setSearchTriggered(true);
 
-  };
+    }
+  }, [isConnected]);
+
+
+
 
   const onRender = (id, phase, actualDuration) => {
-    // console.log(`Component: ${id}, Phase: ${phase}, Actual Duration: ${actualDuration}ms`);
+    // console.log(`[Profiler] ${id} - ${phase}`);
+    // console.log(`Actual render duration: ${actualDuration}ms`);
   };
+  
 
   return (
     <Profiler id="ForumListCompanylatest" onRender={onRender}>
       <SafeAreaView style={{ flex: 1, backgroundColor: 'whitesmoke', }}>
+
+        <View style={AppStyles.headerContainer}>
+          <View style={AppStyles.searchContainer}>
+            <View style={AppStyles.inputContainer}>
+              <TextInput
+                style={[AppStyles.searchInput]}
+                placeholder="Search"
+                ref={searchInputRef}
+                placeholderTextColor="gray"
+                value={searchQuery}
+                onChangeText={handleDebouncedTextChange}
+              />
+
+              {searchTriggered ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setSearchQuery('');
+                    setSearchTriggered(false);
+                    setSearchResults([]);
+                    setSearchCount(0);
+                  }}
+                  style={AppStyles.iconButton}
+                >
+                  <Icon name="close-circle" size={20} color="gray" />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  // onPress={() => handleSearch(searchQuery)}
+                  style={AppStyles.searchIconButton}
+                >
+                  <Icon name="magnify" size={20} color="#075cab" />
+                </TouchableOpacity>
+              )}
+
+            </View>
+
+          </View>
+
+          <TouchableOpacity
+            style={AppStyles.circle}
+            onPress={() => {
+              if (isConnected) {
+                navigation.navigate("ForumPost");
+              } else {
+                showToast('No internet connection', 'error')
+
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="add-circle-outline" size={18} color="#075cab" />
+            <Text style={AppStyles.shareText}>Post</Text>
+          </TouchableOpacity>
+
+        </View>
+
         {showNewJobAlert && (
           <TouchableOpacity onPress={handleRefresh} style={{ position: 'absolute', top: 10, alignSelf: 'center', backgroundColor: '#075cab', padding: 10, borderRadius: 10, zIndex: 10 }}>
             <Text style={{ color: 'white' }}>{newJobCount} new post{newJobCount > 1 ? 's' : ''} available — Tap to refresh</Text>
@@ -1113,179 +1037,68 @@ const Latest = ({ isPageFocused, scrollRef }) => {
         )}
         <View style={styles.container}>
 
-          {suggestions.length > 0 && (
-            <ScrollView
-              style={styles.suggestionContainer}
+
+
+          {!loading ? (
+            <FlatList
+              data={!searchTriggered || searchQuery.trim() === '' ? localPosts : searchResults}
+              renderItem={renderItem}
+              ref={listRef}
+              showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ backgroundColor: '#fff' }}
-            >
-              {suggestions.slice(0, suggestionsLimit).map((item, index) => (
-                <TouchableOpacity
-                  key={index}
-                  onPress={() => {
-                    const slicedQuery = item?.forum_body.length > 100
-                      ? `${item?.forum_body.slice(0, 30)}`
-                      : item?.forum_body;
+              initialNumToRender={3}
+              maxToRenderPerBatch={10}
+              updateCellsBatchingPeriod={100}
+              windowSize={7}
+              removeClippedSubviews={true}
 
-                    setSearchQuery(slicedQuery);
-                    handleSearch(slicedQuery);
-                    setSuggestions([]);
-                    setSuggestionsLimit(5);
-                    searchInputRef.current?.blur();
-                  }}
-                  style={styles.suggestionItem}
-                >
-                  <Text style={styles.suggestionTitle}>
+              onScrollBeginDrag={() => {
+                Keyboard.dismiss();
+                searchInputRef.current?.blur?.();
 
-                    {item?.forum_body.length > 100
-                      ? `${item?.forum_body.slice(0, 40)}...`
-                      : item?.forum_body}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              }}
+              keyExtractor={(item, index) => `${item.forum_id}-${index}`}
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
+              refreshControl={
+                <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+              }
 
-              {suggestions.length > suggestionsLimit && (
-                <TouchableOpacity
-                  onPress={() => setSuggestionsLimit(suggestionsLimit + 5)}
-                  style={styles.loadMoreButton}
-                >
-                  <Text style={styles.loadMoreText}>Load More</Text>
-                </TouchableOpacity>
-              )}
-            </ScrollView>
+              onEndReached={handleEndReached}
+              onEndReachedThreshold={0.5}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: '10%' }}
+              ListHeaderComponent={
+                <>
+                  {searchTriggered && searchResults.length > 0 && (
+                    <Text style={styles.companyCount}>
+                      {searchResults.length} results found
+                    </Text>
+                  )}
+                </>
+              }
+              ListEmptyComponent={
+                (searchTriggered && searchResults.length === 0) ? (
+                  <View style={{ alignItems: 'center', marginTop: 40 }}>
+                    <Text style={{ fontSize: 16, color: '#666' }}>No posts found</Text>
+                  </View>
+                ) : null
+              }
+
+              ListFooterComponent={
+                loadingMore ? (
+                  <View style={{ paddingVertical: 20 }}>
+                    <ActivityIndicator size="small" color="#075cab" />
+                  </View>
+                ) : null
+              }
+
+            />
+          ) : (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator color={'#075cab'} size="large" />
+            </View>
           )}
 
-          <TouchableWithoutFeedback
-            onPress={() => {
-              Keyboard.dismiss();
-              searchInputRef.current?.blur?.();
-              setSuggestions([]);
-            }}
-          >
-            {!loading ? (
-              <FlatList
-                data={!searchTriggered || searchQuery.trim() === '' ? localPosts : searchResults}
-                renderItem={renderItem}
-                ref={listRef}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                initialNumToRender={3}
-                maxToRenderPerBatch={10}
-                updateCellsBatchingPeriod={100}
-                windowSize={7}
-                removeClippedSubviews={true}
-
-                onScrollBeginDrag={() => {
-                  Keyboard.dismiss();
-                  searchInputRef.current?.blur?.();
-                  setSuggestions([]);
-                }}
-                keyExtractor={(item, index) => `${item.forum_id}-${index}`}
-                onViewableItemsChanged={onViewableItemsChanged}
-                viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
-                refreshControl={
-                  <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
-                }
-
-                onEndReached={handleEndReached}
-                onEndReachedThreshold={0.5}
-                contentContainerStyle={{ flexGrow: 1, paddingBottom: '10%' }}
-
-                ListHeaderComponent={
-                  <>
-                    <View style={AppStyles.headerContainer}>
-                      <View style={AppStyles.searchContainer}>
-                        <View style={AppStyles.inputContainer}>
-                          <TextInput
-                            style={[AppStyles.searchInput]}
-                            placeholder="Search"
-                            ref={searchInputRef}
-                            placeholderTextColor="gray"
-                            value={searchQuery}
-                            onChangeText={handleInputChange}
-                            onSubmitEditing={() => {
-                              if (searchQuery.trim() !== '') {
-                                handleSearch(searchQuery);
-                                setSearchTriggered(true);
-                                setSuggestions([]);
-                                searchInputRef.current?.blur();
-                              }
-                            }}
-                            returnKeyType="search"
-                          />
-
-                          {searchTriggered ? (
-                            <TouchableOpacity
-                              onPress={() => {
-                                setSearchQuery('');
-                                setSearchTriggered(false);
-                                setSearchResults([]);
-                                setSearchCount(0);
-                              }}
-                              style={AppStyles.iconButton}
-                            >
-                              <Icon name="close-circle" size={20} color="gray" />
-                            </TouchableOpacity>
-                          ) : (
-                            <TouchableOpacity
-                              // onPress={() => handleSearch(searchQuery)}
-                              style={AppStyles.searchIconButton}
-                            >
-                              <Icon name="magnify" size={20} color="#075cab" />
-                            </TouchableOpacity>
-                          )}
-
-                        </View>
-
-                      </View>
-
-                      <TouchableOpacity
-                        style={AppStyles.circle}
-                        onPress={() => {
-                          if (isConnected) {
-                            navigation.navigate("ForumPost");
-                          } else {
-                            showToast('No internet connection', 'error')
-
-                          }
-                        }}
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons name="add-circle-outline" size={18} color="#075cab" />
-                        <Text style={AppStyles.shareText}>Post</Text>
-                      </TouchableOpacity>
-
-                    </View>
-                    {searchTriggered && searchResults.length > 0 && (
-                      <Text style={styles.companyCount}>
-                        {searchResults.length} results found
-                      </Text>
-                    )}
-                  </>
-                }
-                ListEmptyComponent={
-                  (searchTriggered && searchResults.length === 0) ? (
-                    <View style={{ alignItems: 'center', marginTop: 40 }}>
-                      <Text style={{ fontSize: 16, color: '#666' }}>No posts found</Text>
-                    </View>
-                  ) : null
-                }
-                ListFooterComponent={
-                  loadingMore ? (
-                    <View style={{ paddingVertical: 20 }}>
-                      <ActivityIndicator size="small" color="#075cab" />
-                    </View>
-                  ) : null
-                }
-
-              />
-            ) : (
-              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator color={'#075cab'} size="large" />
-              </View>
-            )}
-
-          </TouchableWithoutFeedback>
 
         </View>
         <ReactionSheet ref={reactionSheetRef} />
@@ -1303,40 +1116,6 @@ const styles = StyleSheet.create({
     color: 'black',
     paddingHorizontal: 15,
     paddingVertical: 5,
-  },
-  suggestionContainer: {
-    position: 'absolute',
-    top: 50, // adjust depending on your header/search bar height
-    width: '95%',
-    alignSelf: 'center',
-    maxHeight: '45%',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingVertical: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 999, // ensures it's above FlatList
-  },
-  suggestionItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  suggestionTitle: {
-    fontSize: 14,
-    color: 'black'
-  },
-  loadMoreButton: {
-    paddingVertical: 10,
-    alignItems: 'center',
-
-  },
-  loadMoreText: {
-    fontWeight: '600',
-    color: '#075cab',
   },
 
   container: {
@@ -1360,7 +1139,7 @@ const styles = StyleSheet.create({
     height: '100%',
     resizeMode: 'cover',
     borderRadius: 100,
-    backgroundColor:'#eee'
+    backgroundColor: '#eee'
   },
 
   title: {

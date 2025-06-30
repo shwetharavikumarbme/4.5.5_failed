@@ -243,9 +243,8 @@ const EnterPhoneScreen = () => {
                 )} */}
 
                 {phone.length < 1 ? null : (
-                  <TouchableOpacity onPress={() => setPhone('')}>
-                   <MaterialIcon name="close-circle" color="#ccc" size={15} style={{ paddingHorizontal: 15 }} />
-
+                  <TouchableOpacity onPress={() => setPhone('')} >
+                   <MaterialIcon name="close-circle" color="#ccc" size={20}  />
                   </TouchableOpacity>
                 )}
               </View>

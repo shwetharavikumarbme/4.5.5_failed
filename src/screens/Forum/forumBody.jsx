@@ -1,26 +1,33 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, useWindowDimensions } from 'react-native';
 import RenderHTML, { defaultHTMLElementModels } from 'react-native-render-html';
 import { decode } from 'html-entities';
 
-// 🔧 Strip out styles like font-size, margin, padding
+// ========== Clean inline styles ==========
 const stripInlineStyles = (domNode) => {
   if (domNode.attribs?.style) {
     domNode.attribs.style = domNode.attribs.style
       .split(';')
-      .filter((style) => {
-        const s = style.trim().toLowerCase();
-        return !s.startsWith('font-size') &&
-               !s.startsWith('font-family') &&
-               !s.startsWith('margin') &&
-               !s.startsWith('padding');
+      .map((s) => s.trim())
+      .filter((s) => {
+        const lower = s.toLowerCase();
+        return (
+          lower.startsWith('font-weight') ||
+          lower.startsWith('font-style') ||
+          lower.startsWith('text-align')
+        );
       })
-      .join(';');
+      .join('; ');
+
+    if (!domNode.attribs.style.trim()) {
+      delete domNode.attribs.style;
+    }
   }
 };
 
-// ✅ Shared static config (won’t recreate each render)
+// ========== Shared styling ==========
 const baseStyle = { fontSize: 14 };
+
 const defaultTextProps = {
   selectable: true,
   style: {
@@ -30,21 +37,24 @@ const defaultTextProps = {
     marginBottom: 0,
   },
 };
+
 const tagStyles = {
-  p: { marginTop: 0, marginBottom: 0 },
-  div: { marginTop: 0, marginBottom: 0 },
+  p: { marginTop: 0, marginBottom: 10, lineHeight: 21 },
+  div: { marginTop: 0, marginBottom: 10, lineHeight: 21 },
+  br: { marginBottom: 10 },
   ul: { marginTop: 0, marginBottom: 0 },
   ol: { marginTop: 0, marginBottom: 0 },
   li: { marginTop: 0, marginBottom: 0 },
   span: { marginTop: 0, marginBottom: 0 },
-  h1: { marginTop: 0, marginBottom: 0 },
-  h2: { marginTop: 0, marginBottom: 0 },
-  h3: { marginTop: 0, marginBottom: 0 },
-  h4: { marginTop: 0, marginBottom: 0 },
-  h5: { marginTop: 0, marginBottom: 0 },
-  h6: { marginTop: 0, marginBottom: 0 },
+  h1: { marginTop: 10, marginBottom: 10 },
+  h2: { marginTop: 10, marginBottom: 10 },
+  h3: { marginTop: 10, marginBottom: 10 },
+  h4: { marginTop: 10, marginBottom: 10 },
+  h5: { marginTop: 10, marginBottom: 10 },
+  h6: { marginTop: 10, marginBottom: 10 },
 };
 
+// ========== RenderHTML Wrapper (memoized) ==========
 const RenderHtmlRenderer = React.memo(({ sourceHtml, width }) => {
   const domVisitors = useMemo(() => ({ onElement: stripInlineStyles }), []);
   const memoSource = useMemo(() => ({ html: sourceHtml }), [sourceHtml]);
@@ -65,90 +75,63 @@ const RenderHtmlRenderer = React.memo(({ sourceHtml, width }) => {
   );
 });
 
+// ========== ForumBody Component ==========
 export const ForumBody = ({ html = '', forumId, isExpanded, toggleFullText }) => {
   const { width } = useWindowDimensions();
-  const MAX_PREVIEW_CHARS = 200;
-  const MAX_HEIGHT = 23 * 4;
+  const MAX_CHARS = 200;
 
-  const [shouldTruncate, setShouldTruncate] = useState(false);
-  const [measured, setMeasured] = useState(false);
-
-  useEffect(() => {
-    if (html.length > MAX_PREVIEW_CHARS) {
-      setShouldTruncate(true);
-    }
-  }, [html]);
-
-  const onTextLayout = useCallback((e) => {
-    if (!measured) {
-      const height = e.nativeEvent.layout.height;
-      if (height > MAX_HEIGHT) {
-        setShouldTruncate(true);
-      }
-      setMeasured(true);
-    }
-  }, [measured]);
-
+  // Generate plain text from HTML
   const plainText = useMemo(() => {
-    const stripped = html?.replace(/<\/?[^>]+(>|$)/g, '') || '';
+    const stripped = html
+      ?.replace(/<\/(p|div|br|h[1-6]|li)>/gi, ' ')
+      .replace(/<[^>]+>/g, '') || '';
     return decode(stripped.trim());
   }, [html]);
 
-  const shouldRenderHtml = isExpanded || !shouldTruncate;
+  const showReadMore = plainText.length > MAX_CHARS;
 
-  const content = (
-    <View style={{ marginTop: 5 }}>
-      <View onLayout={onTextLayout}>
-        {shouldRenderHtml ? (
-          <RenderHtmlRenderer sourceHtml={html} width={width} />
-        ) : (
-          <Text
-            numberOfLines={4}
-            ellipsizeMode="tail"
-            style={{
-              fontSize: 14,
-              color: '#000',
-              lineHeight: 21,
-              marginBottom: 5,
-              backgroundColor:'#fff'
-            }}
-          >
-            {plainText}
-          </Text>
-        )}
+  const collapsedHtml = useMemo(() => {
+    if (!showReadMore || isExpanded) return html;
+    const trimmed = plainText.slice(0, MAX_CHARS).trimEnd();
+    // Ellipsis + Read more on same line
+    return `<p>${trimmed}... <span style="color: #075cab;">Read more</span></p>`;
+  }, [html, plainText, isExpanded, showReadMore]);
+
+  const handleToggle = () => {
+    if (typeof toggleFullText === 'function') {
+      toggleFullText(forumId);
+    }
+  };
+
+  return (
+    <TouchableOpacity
+      onPress={showReadMore ? handleToggle : undefined}
+      activeOpacity={showReadMore ? 0.9 : 1}
+      style={{ marginTop: 5 }}
+    >
+      <View>
+        <RenderHtmlRenderer sourceHtml={collapsedHtml} width={width} />
       </View>
 
-      {shouldTruncate && typeof toggleFullText === 'function' && (
-        <TouchableOpacity
-          onPress={() => toggleFullText(forumId)}
-          activeOpacity={1}
-          style={{ padding: 5 }}
-        >
-          <Text style={{ color: '#075cab', fontSize: 13 }}>
-            {isExpanded ? 'Read less' : 'Read more'}
-          </Text>
-        </TouchableOpacity>
+      {/* Show "Read less" only when expanded */}
+      {showReadMore && isExpanded && (
+        <Text style={{ color: '#075cab', fontSize: 13, marginTop: 4 }}>
+          Read less
+        </Text>
       )}
-    </View>
+    </TouchableOpacity>
   );
-
-  if (typeof toggleFullText === 'function') {
-    return (
-      <TouchableOpacity
-        onPress={() => toggleFullText(forumId)}
-        activeOpacity={1}
-      >
-        {content}
-      </TouchableOpacity>
-    );
-  }
-
-  return content;
 };
+
+
+
 
 export const ForumPostBody = ({ html, forumId, numberOfLines }) => {
   const plainText = useMemo(() => {
-    const stripped = html?.replace(/<\/?[^>]+(>|$)/g, '') || '';
+    const stripped = html
+      ?.replace(/<\/(p|div|br|h[1-6]|li)>/gi, ' ') // replace closing tags with space
+      .replace(/<[^>]+>/g, '') || '';
+
     return decode(stripped.trim());
   }, [html]);
 
@@ -161,7 +144,7 @@ export const ForumPostBody = ({ html, forumId, numberOfLines }) => {
         } : {})}
         style={{
           fontSize: 14,
-          color: '#fff',
+          color: '#444',
           fontWeight: '400',
           lineHeight: 21,
         }}
@@ -175,7 +158,10 @@ export const ForumPostBody = ({ html, forumId, numberOfLines }) => {
 
 export const MyPostBody = ({ html, forumId, numberOfLines }) => {
   const plainText = useMemo(() => {
-    const stripped = html?.replace(/<\/?[^>]+(>|$)/g, '') || '';
+    const stripped = html
+      ?.replace(/<\/(p|div|br|h[1-6]|li)>/gi, ' ') // replace closing tags with space
+      .replace(/<[^>]+>/g, '') || '';
+
     return decode(stripped.trim());
   }, [html]);
 
@@ -200,3 +186,60 @@ export const MyPostBody = ({ html, forumId, numberOfLines }) => {
 };
 
 
+export const cleanForumHtml = (html) => {
+  if (!html) return '';
+
+  html = cleanTooltips(html);
+
+  return html
+    .replace(/style="[^"]*(color|background-color):[^";]*;?[^"]*"/gi, (match) => {
+      return match
+        .replace(/(?:color|background-color):[^";]*;?/gi, '')
+        .replace(/style="\s*"/gi, '');
+    })
+    .replace(/style="([^"]*)"/gi, (match, styleContent) => {
+      const allowed = styleContent
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.startsWith('font-weight') || s.startsWith('font-style') || s.startsWith('text-align'));
+      return allowed.length ? `style="${allowed.join('; ')}"` : '';
+    })
+    .replace(/\sstyle="\s*"/gi, '')
+    .replace(/<a [^>]*href="([^"]+)"[^>]*>/gi, '<a href="$1">')
+    .replace(/<[^\/>][^>]*>\s*<\/[^>]+>/gi, '');
+};
+
+export const cleanTooltips = (html) => {
+  return html
+    .replace(/aria-[\w-]+="[^"]*"/gi, '')
+    .replace(/<abbr[^>]*>.*?<\/abbr>/gi, '')
+    .replace(/<sup[^>]*>.*?<\/sup>/gi, '')
+    .replace(/\b([A-Za-z]+)\b\s+\1\b/gi, '$1')
+    .replace(/Tooltip:?\s+[^<\n]+/gi, '');
+};
+
+export const normalizeHtml = (input = '') => {
+  if (!input?.trim()) return '';
+
+  const isHtml = /<\/?[a-z][\s\S]*>/i.test(input);
+  return isHtml
+    ? decode(input)
+    : `<p>${decode(input)
+        .trim()
+        .split(/\n+/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .join('</p><p>')}</p>`;
+};
+
+export const generateHighlightedHTML = (rawHtml = '', query = '') => {
+  if (!query?.trim()) return normalizeHtml(rawHtml);
+
+  const safeQuery = query.replace(/[-[\]/{}()*+?.\\^$|]/g, '\\$&');
+  const regex = new RegExp(`(${safeQuery})`, 'gi');
+
+  let html = normalizeHtml(rawHtml);
+  return html.replace(regex, (match) =>
+    `<span style="background-color: #fff9c4;  border-radius: 4px; padding: 0 2px;">${match}</span>`
+  );
+};

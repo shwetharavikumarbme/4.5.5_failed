@@ -1,6 +1,6 @@
 
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Modal, FlatList, Linking, Pressable, SafeAreaView, RefreshControl, ActivityIndicator } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,6 +18,7 @@ import apiClient from '../ApiClient';
 import { useNetwork } from '../AppUtils/IdProvider';
 import { openMediaViewer } from '../helperComponents.jsx/mediaViewer';
 import { updateLastSeen } from '../AppUtils/LastSeen';
+import { OtpInput } from "react-native-otp-entry";
 
 const CompanyProfileScreen = ({ route }) => {
   const navigation = useNavigation();
@@ -26,7 +27,9 @@ const CompanyProfileScreen = ({ route }) => {
   const [isProductDropdownVisible, setProductDropdownVisible] = useState(false);
   const [isServiceDropdownVisible, setServiceDropdownVisible] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [otp, setOtp] = useState('');
+
+  const [otp, setOTP] = useState('');
+  const otpRef = useRef('');
   const [timer, setTimer] = useState(30);
   const [step, setStep] = useState(1);
   const [isResendEnabled, setIsResendEnabled] = useState(true);
@@ -188,34 +191,40 @@ const CompanyProfileScreen = ({ route }) => {
   }, [timer]);
 
 
-  const handleVerifyOTP = () => {
-    if (otp.length !== 6 || !/^\d+$/.test(otp)) {
-
+  const handleVerifyOTP = async () => {
+    const enteredOTP = otpRef.current;
+    console.log('Entered OTP:', enteredOTP);
+  
+    if (enteredOTP.length !== 6 || !/^\d{6}$/.test(enteredOTP)) {
       showToast("Please enter a valid 6 digit OTP", 'error');
       return;
     }
-
-    axios
-      .post(
+  
+    try {
+      const res = await axios.post(
         'https://h7l1568kga.execute-api.ap-south-1.amazonaws.com/dev/verifyOtpMsg91',
-        { command: 'verifyOtpMsg91', otp, user_phone_number: phoneNumber },
-        { headers: { 'x-api-key': 'k1xuty5IpZ2oHOEOjgMz57wHfdFT8UQ16DxCFkzk' } }
-      )
-      .then((res) => {
-        if (res.data.type === 'success') {
-          handleDeleteAccount();
-        } else {
-          showToast("OTP doesn't match", 'error');
-
+        {
+          command: 'verifyOtpMsg91',
+          otp: enteredOTP, // ✅ use correct OTP value
+          user_phone_number: phoneNumber,
+        },
+        {
+          headers: {
+            'x-api-key': 'k1xuty5IpZ2oHOEOjgMz57wHfdFT8UQ16DxCFkzk',
+          },
         }
-      })
-      .catch((error) => {
-
-        showToast("Try again later", 'error');
-
-
-      });
+      );
+  
+      if (res.data.type === 'success') {
+        await handleDeleteAccount(); // ✅ added `await` in async context
+      } else {
+        showToast("OTP doesn't match", 'error');
+      }
+    } catch (error) {
+      showToast("Try again later", 'error');
+    }
   };
+  
 
   const sendOtp = (phoneNumber) => {
     axios
@@ -335,7 +344,7 @@ const CompanyProfileScreen = ({ route }) => {
   const handleYesClick = () => {
     setStep(2); // Move to OTP step
     sendOtp(phoneNumber); // Send OTP
-    setOtp('');
+    setOTP('');
     setTimer(30); // Start timer
     setIsResendEnabled(false); // Disable resend button initially
   };
@@ -609,9 +618,9 @@ const CompanyProfileScreen = ({ route }) => {
         </TouchableOpacity>
 
 
-        <TouchableOpacity style={styles.deleteAccountButton}  >
-          <Icon name="account-remove-outline" size={24} color="red" style={styles.icon} onPress={handleDeleteClick} />
-          <Text style={styles.deleteAccountButtonText} onPress={handleDeleteClick}>Delete account</Text>
+        <TouchableOpacity style={styles.deleteAccountButton} onPress={handleDeleteClick}>
+          <Icon name="account-remove-outline" size={24} color="red" style={styles.icon} />
+          <Text style={styles.deleteAccountButtonText} >Delete account</Text>
         </TouchableOpacity>
 
       </ScrollView>
@@ -640,10 +649,10 @@ const CompanyProfileScreen = ({ route }) => {
           <View style={styles.modalContainer1}>
             <TouchableOpacity onPress={() => {
               setIsModalVisible(false);
-              setOtp('');
+              setOTP('');
               setTimer(null);
             }} style={styles.closeIconContainer}>
-              <Ionicons name="close" size={24} color="black" />
+              <Text style={styles.closeText}>✕</Text>
             </TouchableOpacity>
             {step === 1 ? (
 
@@ -677,29 +686,66 @@ const CompanyProfileScreen = ({ route }) => {
             ) : (
 
               <>
-                <Text style={styles.modalTitle1}>Enter the OTP sent to:  </Text>
-                <Text style={{ marginVertical: 10 }}>{phoneNumber}</Text>
-                <TextInput
-                  style={styles.otpInput}
-                  value={otp}
-                  onChangeText={setOtp}
-                  placeholder="Enter OTP"
-                  keyboardType="numeric"
-                  maxLength={6}
-                  placeholderTextColor='gray'
-                />
-                <TouchableOpacity style={styles.verifyButton} onPress={handleVerifyOTP}>
-                  <Text style={styles.verifyButtonText}>Verify OTP</Text>
-                </TouchableOpacity>
+                <View style={styles.scrollViewContainer} showsVerticalScrollIndicator={false}>
 
-                <View style={styles.resendContainer}>
-                  {isResendEnabled ? (
-                    <TouchableOpacity onPress={resendHandle} style={styles.resendButton}>
-                      <Text style={styles.resendButtonText}>Resend OTP</Text>
+                  <Text style={styles.infoText}>
+                    Enter the OTP sent to: {phoneNumber}
+                  </Text>
+                  <OtpInput
+                    numberOfDigits={6}
+                    focusColor="#075cab"
+                    autoFocus={true}
+                    // hideStick={true}
+                    placeholder="•"
+                    // blurOnFilled={true}
+                    disabled={false}
+                    type="numeric"
+                    secureTextEntry={false}
+                    focusStickBlinkingDuration={500}
+                    onTextChange={(text) => {
+                      setOTP(text);
+                      otpRef.current = text; // ✅ latest OTP
+                    }}
+                    onFilled={(text) => {
+                      setOTP(text);
+                      otpRef.current = text;
+                      handleVerifyOTP();
+                    }}
+
+                    textInputProps={{
+                      accessibilityLabel: "One-Time Password",
+                    }}
+                    textProps={{
+                      accessibilityRole: "text",
+                      accessibilityLabel: "OTP digit",
+                      allowFontScaling: false,
+                    }}
+                    theme={{
+                      containerStyle: styles.otpContainer,
+                      pinCodeContainerStyle: styles.pinCodeContainer,
+                      pinCodeTextStyle: styles.pinCodeText,
+                      focusStickStyle: styles.focusStick,
+                      focusedPinCodeContainerStyle: styles.activePinCodeContainer,
+                      placeholderTextStyle: styles.placeholderText,
+                      filledPinCodeContainerStyle: styles.filledPinCodeContainer,
+                      disabledPinCodeContainerStyle: styles.disabledPinCodeContainer,
+                    }}
+                  />
+
+
+                  <View style={styles.actionsRow}>
+                    {isResendEnabled ? (
+                      <TouchableOpacity onPress={resendHandle} >
+                        <Text style={styles.resendButtonText}>Resend OTP</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <Text style={styles.timerText}>Resend in {timer}s</Text>
+                    )}
+
+                    <TouchableOpacity onPress={handleVerifyOTP} >
+                      <Text style={styles.resendButtonText}>Verify OTP</Text>
                     </TouchableOpacity>
-                  ) : (
-                    <Text style={styles.timerText}>Resend in {timer}</Text>
-                  )}
+                  </View>
                 </View>
 
               </>
@@ -713,7 +759,7 @@ const CompanyProfileScreen = ({ route }) => {
   );
 };
 
-const styles = StyleSheet.create({
+ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
@@ -1021,7 +1067,19 @@ const styles = StyleSheet.create({
     top: 10,
     right: 10,
     zIndex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 20,
+    width: 25,
+    height: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
+
+  closeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+},
   warningContainer: {
     backgroundColor: 'white',
     padding: 15,
@@ -1042,18 +1100,14 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     textAlign: 'center',
   },
-  modalTitle1: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#333',
-    textAlign: 'center',
-  },
+
   deletionText: {
-    fontSize: 16,
+    fontSize: 14,
     color: 'black',
     textAlign: 'justify',
-    lineHeight: 22,
+    lineHeight: 23,
     marginBottom: 25,
+    fontWeight:'500'
   },
   deletionText1: {
     fontSize: 16,
@@ -1063,19 +1117,7 @@ const styles = StyleSheet.create({
     marginBottom: 25,
     fontWeight: '500',
   },
-  otpInput: {
-    height: 50,
-    width: '80%',
-    backgroundColor: '#f9f9f9',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 20,
-    color: 'black',
-  },
+
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -1113,37 +1155,84 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
   },
-  verifyButton: {
-    // backgroundColor: '#4caf50',
+
+
+
+  otpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  pinCodeContainer: {
+    borderWidth: 0,
+    borderColor: '#ccc',
     borderRadius: 10,
-    paddingVertical: 5,
-    paddingHorizontal: 25,
-  },
-  verifyButtonText: {
-    color: '#075cab',
-    fontSize: 15,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  resendContainer: {
-    marginTop: 15,
+    width: 40,
+    height: 45,
+    justifyContent: 'center',
     alignItems: 'center',
+    marginHorizontal: 5,
   },
-  resendButton: {
-    paddingVertical: 5,
-    paddingHorizontal: 15,
+  activePinCodeContainer: {
+    borderColor: '#075cab',
   },
+  filledPinCodeContainer: {
+    backgroundColor: '#eaf4ff',
+    borderColor: '#075cab',
+  },
+  disabledPinCodeContainer: {
+    backgroundColor: '#f2f2f2',
+  },
+  pinCodeText: {
+    fontSize: 20,
+    color: '#000',
+    fontWeight: '400',
+  },
+  focusStick: {
+    width: 2,
+    height: 25,
+    backgroundColor: '#075cab',
+  },
+  placeholderText: {
+    color: '#aaa',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 20,
+    marginHorizontal: 15
+  },
+
   resendButtonText: {
     color: '#075cab',
-    fontSize: 15,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
+    padding: 10,
+
   },
   timerText: {
-    fontSize: 14,
-    color: 'firebrick',
+    color: '#999',
+    fontSize: 13,
+    padding: 10,
+
   },
 
+  infoText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 10,
+    color: '#333',
+    fontWeight: '500'
+  },
+  scrollViewContainer: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    paddingBottom: 10,
+    justifyContent: 'flex-start',
 
+  },
 });
 
 export default CompanyProfileScreen;

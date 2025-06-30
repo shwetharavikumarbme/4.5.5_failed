@@ -13,6 +13,8 @@ import { useDispatch } from 'react-redux';
 import { showToast } from '../AppUtils/CustomToast';
 import apiClient from '../ApiClient';
 import { useNetwork } from '../AppUtils/IdProvider';
+import { EventRegister } from 'react-native-event-listeners';
+import { getSignedUrl } from '../helperComponents.jsx/signedUrls';
 
 const YourComapanyPostedJob = () => {
   const navigation = useNavigation();
@@ -36,6 +38,49 @@ const YourComapanyPostedJob = () => {
       new Promise((_, reject) => setTimeout(() => reject(new Error("Request timed out")), timeout)),
     ]);
   };
+
+  useEffect(() => {
+    const onJobCreated = async (data) => {
+      const { newPost } = data;
+      console.log('newPost', newPost);
+  
+      // Insert or replace (upsert), newest at the top
+      setPosts(prevJobs => {
+        const filtered = prevJobs.filter(job => job.post_id !== newPost.post_id);
+        return [newPost, ...filtered];
+      });
+    };
+  
+    const onJobUpdated = async (data) => {
+      const { updatedPost } = data;
+  
+      setPosts(prevJobs =>
+        prevJobs.map(job =>
+          job.post_id === updatedPost.post_id ? updatedPost : job
+        )
+      );
+    };
+  
+    const onJobDeleted = (data) => {
+      const { postId } = data;
+  
+      setPosts(prevJobs =>
+        prevJobs.filter(job => job.post_id !== postId)
+      );
+    };
+  
+    const createdListener = EventRegister.addEventListener('onJobPostCreated', onJobCreated);
+    const updatedListener = EventRegister.addEventListener('onJobUpdated', onJobUpdated);
+    const deletedListener = EventRegister.addEventListener('onJobDeleted', onJobDeleted);
+  
+    return () => {
+      EventRegister.removeEventListener(createdListener);
+      EventRegister.removeEventListener(updatedListener);
+      EventRegister.removeEventListener(deletedListener);
+    };
+  }, []);
+  
+
   const fetchCompanyJobPosts = async (lastEvaluatedKey = null) => {
     if (loading || loadingMore) return;
 
@@ -156,22 +201,20 @@ const YourComapanyPostedJob = () => {
 
   const handleDelete = async () => {
     if (!postToDelete) return;
-
+  
     try {
       const response = await apiClient.post('/deleteJobPost', {
         command: "deleteJobPost",
         company_id: postToDelete.company_id,
         post_id: postToDelete.post_id,
       });
-
+  
       if (response.data.status === 'success') {
-        setPosts(posts.filter(p => p.post_id !== postToDelete.post_id));
-
-        dispatch({
-          type: 'DELETE_JOB_POST',
-          payload: postToDelete.post_id,
+        // ✅ Emit deletion event
+        EventRegister.emit('onJobDeleted', {
+          postId: postToDelete.post_id,
         });
-
+  
         showToast("Job deleted successfully", 'success');
       } else {
         showToast("Something went wrong", 'error');
@@ -182,6 +225,7 @@ const YourComapanyPostedJob = () => {
       setDeleteAlertVisible(false);
     }
   };
+  
 
 
   const renderJob = ({ item: post }) => (

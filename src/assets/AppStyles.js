@@ -559,6 +559,71 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
+  articleCard: {
+    padding: 12,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    marginBottom: 12,
+    elevation: 2,
+  },
+  articleCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom:6
+  },
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  authorSection: {
+    alignItems: 'center',
+    flexShrink: 1,
+    maxWidth: 100,
+  },
+  badge: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#666',
+
+  },
+  authorImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor:'#ddd',
+    marginHorizontal:12
+  },
+  authorName: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    alignSelf:'flex-start'
+
+  },
+  articleMedia: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  articleTime: {
+    fontSize: 12,
+    color: '#666',
+    paddingHorizontal:10
+  },
+  articleExcerpt: {
+    marginTop: 6,
+    fontSize: 14,
+    color: '#333',
+  },
 
 
 });

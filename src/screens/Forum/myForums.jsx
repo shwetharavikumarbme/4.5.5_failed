@@ -23,30 +23,16 @@ const videoExtensions = [
   '.m4v', '.3gp', '.3g2', '.f4v', '.f4p', '.f4a', '.f4b', '.qt', '.quicktime'
 ];
 
-const stripInlineStyles = (domNode) => {
-  if (domNode.attribs && domNode.attribs.style) {
-    domNode.attribs.style = domNode.attribs.style
-      .split(';')
-      .filter((style) => {
-        const s = style.trim().toLowerCase();
-        return !(
-          s.startsWith('font-size') ||
-          s.startsWith('font-family') ||
-          s.startsWith('margin') ||
-          s.startsWith('padding')
-        );
-      })
-      .join(';');
-  }
-};
 
 const YourForumListScreen = ({ navigation, route }) => {
   const myForums = useSelector(state => state.myForums.posts);
-  const imageUrls = useSelector(state => state.myForums.imageUrls);
+  const imageUrls1 = useSelector(state => state.myForums.imageUrls);
+  
   const { myId, myData } = useNetwork();
 
-
   const [allForumPost, setAllForumPost] = useState([]);
+  const [imageUrls, setImageUrls] = useState([]);
+
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [postToDelete, setPostToDelete] = useState(null);
   const scrollViewRef = useRef(null)
@@ -67,36 +53,62 @@ const YourForumListScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     const listener = EventRegister.addEventListener('onForumPostCreated', async ({ newPost }) => {
+      console.log('🔔 Forum Post Created Event Received:', newPost);
 
       try {
         const signedUrl = await getSignedUrlForPost(newPost, defaultLogo);
         const postWithMedia = { ...newPost, signedUrl };
 
-        setAllForumPost((prev) => [postWithMedia, ...prev]);
+        console.log('🖼️ Signed URL resolved:', signedUrl);
+        console.log('✅ Adding post to forum list (with media):', postWithMedia);
+
+        setAllForumPost((prev) => {
+          const updated = [postWithMedia, ...prev];
+          console.log('📥 Updated post list:', updated);
+          return [...updated]; // force new reference
+        });
 
       } catch (error) {
-        console.error('Failed to fetch media for new post:', error);
-        // Fallback: push the raw post anyway
-        setAllForumPost((prev) => [newPost, ...prev]);
+        console.error('⚠️ Failed to fetch media for new post:', error);
+        console.log('📝 Fallback: Adding post without media:', newPost);
+
+        setAllForumPost((prev) => {
+          const updated = [newPost, ...prev];
+          console.log('📥 Updated post list (fallback):', updated);
+          return [...updated]; // ensure new array reference
+        });
       }
     });
+
     const deleteListener = EventRegister.addEventListener('onForumPostDeleted', ({ forum_id }) => {
-      setAllForumPost((prev) => prev.filter((post) => post.forum_id !== forum_id));
+      console.log('❌ Post Deleted Event:', forum_id);
+
+      setAllForumPost((prev) => {
+        const updated = prev.filter((post) => post.forum_id !== forum_id);
+        console.log('🗑️ Updated list after deletion:', updated);
+        return [...updated];
+      });
     });
 
     const updateListener = EventRegister.addEventListener('onForumPostUpdated', ({ updatedPost }) => {
-      setAllForumPost(prev =>
-        prev.map(post => post.forum_id === updatedPost.forum_id ? updatedPost : post)
-      );
+      console.log('✏️ Post Updated Event:', updatedPost);
+
+      setAllForumPost((prev) => {
+        const updated = prev.map((post) =>
+          post.forum_id === updatedPost.forum_id ? updatedPost : post
+        );
+        console.log('🔁 Updated list after edit:', updated);
+        return [...updated];
+      });
     });
 
     return () => {
       EventRegister.removeEventListener(listener);
       EventRegister.removeEventListener(deleteListener);
       EventRegister.removeEventListener(updateListener);
-
     };
   }, []);
+
 
   const fetchPosts = async (lastEvaluatedKey = null) => {
     if (!myId || loading || loadingMore) return;
@@ -137,7 +149,6 @@ const YourForumListScreen = ({ navigation, route }) => {
         }
 
         setAllForumPost(updatedPosts);
-        dispatch(setMyPosts(updatedPosts));
 
         // Pagination
         if (response.data.lastEvaluatedKey) {
@@ -155,8 +166,7 @@ const YourForumListScreen = ({ navigation, route }) => {
             urlsObject[post.forum_id] = await getSignedUrlForPost(post, defaultLogo);
           })
         );
-
-        dispatch(setMyPostImageUrls(urlsObject));
+        setImageUrls(urlsObject)
 
       }
     } catch (error) {
@@ -238,9 +248,9 @@ const YourForumListScreen = ({ navigation, route }) => {
       });
 
       if (response.data.status === 'success') {
-        dispatch({ type: 'DELETE_POST', payload: postToDelete });
+
         EventRegister.emit('onForumPostDeleted', { forum_id: postToDelete });
-        dispatch(deleteMyPost(postToDelete));
+
         showToast("Forum post deleted", 'success');
       } else {
         throw new Error(response.data.status_message || "Failed to delete post.");
@@ -331,7 +341,8 @@ const YourForumListScreen = ({ navigation, route }) => {
   const keyExtractor = (item) =>
     item.id ? item.id.toString() : Math.random().toString();
 
-  if (!myForums || myForums.length === 0 || !allForumPost) {
+  if (Array.isArray(allForumPost) && allForumPost.length === 0 && !loading) {
+
     return (
 
       <SafeAreaView style={styles.container}>

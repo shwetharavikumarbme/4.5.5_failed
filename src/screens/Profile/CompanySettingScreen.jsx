@@ -186,36 +186,36 @@ const CompanySettingScreen = () => {
 
 
   const scrollOffsetY = useRef(new Animated.Value(0)).current;
-  
-    const handleScroll = Animated.event(
-      [{ nativeEvent: { contentOffset: { y: scrollOffsetY } } }],
-      {
-        useNativeDriver: true,
-        listener: (event) => {
-          const offsetY = event.nativeEvent.contentOffset.y;
-          console.log('offsetY:', offsetY); // ✅ This logs the current scroll offset
-        },
-      }
-    );
-  
-    const collapsedTranslateY = scrollOffsetY.interpolate({
-      inputRange: [168, 252],
-      outputRange: [-60, 0], // Moves down into view
-      extrapolate: 'clamp',
-    });
-  
-    const collapsedOpacity = scrollOffsetY.interpolate({
-      inputRange: [168, 252],
-      outputRange: [0, 1], // Fades in
-      extrapolate: 'clamp',
-    });
-  
-    const fullProfileOpacity = scrollOffsetY.interpolate({
-      inputRange: [168, 252],
-      outputRange: [1, 0], // Fades out
-      extrapolate: 'clamp',
-    });
-  
+
+  const handleScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollOffsetY } } }],
+    {
+      useNativeDriver: true,
+      listener: (event) => {
+        const offsetY = event.nativeEvent.contentOffset.y;
+        console.log('offsetY:', offsetY); // ✅ This logs the current scroll offset
+      },
+    }
+  );
+
+  const collapsedTranslateY = scrollOffsetY.interpolate({
+    inputRange: [168, 252],
+    outputRange: [-60, 0], // Moves down into view
+    extrapolate: 'clamp',
+  });
+
+  const collapsedOpacity = scrollOffsetY.interpolate({
+    inputRange: [168, 252],
+    outputRange: [0, 1], // Fades in
+    extrapolate: 'clamp',
+  });
+
+  const fullProfileOpacity = scrollOffsetY.interpolate({
+    inputRange: [168, 252],
+    outputRange: [1, 0], // Fades out
+    extrapolate: 'clamp',
+  });
+
 
   return (
 
@@ -226,7 +226,7 @@ const CompanySettingScreen = () => {
         </TouchableOpacity>
       </View > */}
 
-<Animated.View
+      <Animated.View
         style={[
           styles.collapsedProfile,
           {
@@ -247,7 +247,7 @@ const CompanySettingScreen = () => {
               resizeMode={FastImage.resizeMode.cover}
             />
             <Text style={styles.miniName}>
-              {profile?.company_name?.trim()} 
+              {profile?.company_name?.trim()}
             </Text>
           </View>
           <Icon
@@ -260,105 +260,105 @@ const CompanySettingScreen = () => {
 
       <Animated.ScrollView contentContainerStyle={[styles.container, { paddingBottom: '20%', }]}
         showsVerticalScrollIndicator={false} onScroll={handleScroll} >
-      
-          {isConnected ? (
-             <Animated.View style={{ opacity: fullProfileOpacity }}>
-             <TouchableOpacity activeOpacity={1} onPress={() => { navigation.navigate("CompanyProfile") }}
-               style={styles.profileContainer} >
- 
- 
-               <TouchableOpacity style={styles.editProfileButton} onPress={handleUpdate}>
-                 <Text style={styles.editProfileText}>Edit Profile</Text>
-               </TouchableOpacity>
- 
-               <View style={styles.imageContainer}>
-                 <TouchableOpacity
-                   activeOpacity={1}
-                   onPress={() => { navigation.navigate("CompanyProfile") }}
-                 >
-                   <FastImage
-                     source={{ uri: profile?.imageUrl }}
-                     style={styles.detailImage}
-                     resizeMode={FastImage.resizeMode.cover}
-                     onError={() => { }}
-                   />
- 
-                 </TouchableOpacity>
-               </View>
-               <View style={styles.profileDetails}>
- 
-                 <View style={styles.title1}>
-                   <Icon1 name="person" size={20} color="#075cab" />
-                   <Text style={styles.colon}>|</Text>
-                   <Text style={styles.value}>{(profile?.company_name?.trim())}</Text>
- 
-                 </View>
-                 <View style={styles.title1}>
-                   <Icon1 name="phone" size={20} color="#075cab" />
-                   <Text style={styles.colon}>|</Text>
- 
-                   <Text style={styles.value}>{(profile?.company_contact_number || "").trimStart().trimEnd()}</Text>
-                 </View>
-                 <View style={styles.title1}>
-                   <Icon1 name="email" size={20} color="#075cab" />
-                   <Text style={styles.colon}>|</Text>
- 
-                   <Text style={styles.value}>{profile?.company_email_id || ""}</Text>
-                 </View>
-                 {profile?.business_registration_number?.trim() && (
-                   <View style={styles.title1}>
-                     <Icon1 name="school" size={20} color="#075cab" />
-                     <Text style={styles.colon}>|</Text>
-                     <Text style={styles.value}>{profile?.business_registration_number.trimStart().trimEnd()}</Text>
-                   </View>
-                 )}
- 
-               </View>
-               <Icon name="gesture-tap" size={18} color="#888" style={{ alignSelf: 'flex-end' }} />
- 
- 
-             </TouchableOpacity>
-           </Animated.View>
-          ) : null}
 
-          {DrawerList.filter(Boolean).map((item, index) => (
-            <NavigationItem
-              key={index}
-              icon={item.icon}
-              label={item.label}
-              onPress={() => {
-                if (isConnected) {
-                  item.onPress?.();
-                } else {
+        {isConnected ? (
+          <Animated.View style={{ opacity: fullProfileOpacity }}>
+            <TouchableOpacity activeOpacity={1} onPress={() => { navigation.navigate("CompanyProfile") }}
+              style={styles.profileContainer} >
 
-                }
-              }}
-              showSubItems={expandedItem === item.label}
-              onToggle={() => handleToggle(item.label)}
-            >
-              {item.subItems && item.subItems.map((subItem, subIndex) => (
+
+              <TouchableOpacity style={styles.editProfileButton} onPress={handleUpdate}>
+                <Text style={styles.editProfileText}>Edit Profile</Text>
+              </TouchableOpacity>
+
+              <View style={styles.imageContainer}>
                 <TouchableOpacity
-                  key={subIndex}
-                  onPress={() => {
-                    if (isConnected) {
-                      subItem.onPress?.();
-                    } else {
-
-                    }
-                  }}
+                  activeOpacity={1}
+                  onPress={() => { navigation.navigate("CompanyProfile") }}
                 >
-                  <Text style={styles.subItem}>{subItem.label}</Text>
+                  <FastImage
+                    source={{ uri: profile?.imageUrl }}
+                    style={styles.detailImage}
+                    resizeMode={FastImage.resizeMode.cover}
+                    onError={() => { }}
+                  />
+
                 </TouchableOpacity>
-              ))}
-            </NavigationItem>
-          ))}
+              </View>
+              <View style={styles.profileDetails}>
 
-          <NotificationSettings />
+                <View style={styles.title1}>
+                  <Icon1 name="person" size={20} color="#075cab" />
+                  <Text style={styles.colon}>|</Text>
+                  <Text style={styles.value}>{(profile?.company_name?.trim())}</Text>
 
-          <View style={styles.appversion}>
-            <Text style={styles.appText}>App Version: {deviceInfo.appVersion}</Text>
-          </View>
-   
+                </View>
+                <View style={styles.title1}>
+                  <Icon1 name="phone" size={20} color="#075cab" />
+                  <Text style={styles.colon}>|</Text>
+
+                  <Text style={styles.value}>{(profile?.company_contact_number || "").trimStart().trimEnd()}</Text>
+                </View>
+                <View style={styles.title1}>
+                  <Icon1 name="email" size={20} color="#075cab" />
+                  <Text style={styles.colon}>|</Text>
+
+                  <Text style={styles.value}>{profile?.company_email_id || ""}</Text>
+                </View>
+                {profile?.business_registration_number?.trim() && (
+                  <View style={styles.title1}>
+                    <Icon1 name="school" size={20} color="#075cab" />
+                    <Text style={styles.colon}>|</Text>
+                    <Text style={styles.value}>{profile?.business_registration_number.trimStart().trimEnd()}</Text>
+                  </View>
+                )}
+
+              </View>
+              <Icon name="gesture-tap" size={18} color="#888" style={{ alignSelf: 'flex-end' }} />
+
+
+            </TouchableOpacity>
+          </Animated.View>
+        ) : null}
+
+        {DrawerList.filter(Boolean).map((item, index) => (
+          <NavigationItem
+            key={index}
+            icon={item.icon}
+            label={item.label}
+            onPress={() => {
+              if (isConnected) {
+                item.onPress?.();
+              } else {
+
+              }
+            }}
+            showSubItems={expandedItem === item.label}
+            onToggle={() => handleToggle(item.label)}
+          >
+            {item.subItems && item.subItems.map((subItem, subIndex) => (
+              <TouchableOpacity
+                key={subIndex}
+                onPress={() => {
+                  if (isConnected) {
+                    subItem.onPress?.();
+                  } else {
+
+                  }
+                }}
+              >
+                <Text style={styles.subItem}>{subItem.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </NavigationItem>
+        ))}
+
+        <NotificationSettings />
+
+        <View style={styles.appversion}>
+          <Text style={styles.appText}>App Version: {deviceInfo.appVersion}</Text>
+        </View>
+
       </Animated.ScrollView>
       <View style={styles.bottomNavContainer}>
         {tabConfig.map((tab, index) => {
@@ -580,14 +580,13 @@ const styles = StyleSheet.create({
 
   container1: {
     flex: 1,
-
   },
 
   dropdownIcon: {
     marginLeft: 'auto',
     color: '#075cab',
   },
-collapsedProfile: {
+  collapsedProfile: {
     position: 'absolute',
     top: 0,
     left: 0,

@@ -2,11 +2,11 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 
-import LoginPhoneScreen from '../screens/AuthRegister/LoginPhone';
-import LoginVerifyOTPScreen from '../screens/AuthRegister/LoginVerifyOTP';
+import LoginPhoneScreen from '../screens/AuthRegister/Login';
+import LoginVerifyOTPScreen from '../screens/AuthRegister/LoginOTP';
 import UserSignupScreen from '../screens/AuthRegister/UserSignup';
-import EnterPhoneScreen from '../screens/AuthRegister/EnterPhone';
-import VerifyOTPScreen from '../screens/AuthRegister/VerifyOTP';
+import EnterPhoneScreen from '../screens/AuthRegister/SignUp';
+import VerifyOTPScreen from '../screens/AuthRegister/SignUpOTP';
 import ProfileTypeScreen from '../screens/AuthRegister/ProfileType';
 import CompanyUserSignupScreen from '../screens/AuthRegister/CompanyUserSignup';
 import UserSubscriptionScreen from '../screens/subscription/UserSubscriptionScreen';

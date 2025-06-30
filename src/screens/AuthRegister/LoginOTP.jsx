@@ -18,6 +18,7 @@ import { getApp } from '@react-native-firebase/app';
 import { getMessaging, getToken, requestPermission, AuthorizationStatus } from '@react-native-firebase/messaging';
 import messaging from '@react-native-firebase/messaging';
 import { showToast } from '../AppUtils/CustomToast';
+import { OtpInput } from "react-native-otp-entry";
 
 
 const LoginVerifyOTPScreen = () => {
@@ -28,7 +29,9 @@ const LoginVerifyOTPScreen = () => {
   // console.log('email', phone)
   // console.log('fullPhoneNumber', fullPhoneNumber)
 
-  const [otp, setOTP] = useState(Array(6).fill(''));
+  const [otp, setOTP] = useState('');
+const otpRef = useRef('');
+
   const otpInputs = useRef([]);
   const [loading, setLoading] = useState(false);
   const [timer, setTimer] = useState(30);
@@ -107,32 +110,33 @@ const LoginVerifyOTPScreen = () => {
 
   const handleVerifyOTP = async () => {
     if (isProcessing.current) return;
-
-    const enteredOTP = otp.join('');
-    if (enteredOTP.length !== 6 || !/^\d+$/.test(enteredOTP)) {
-
+  
+    const enteredOTP = otpRef.current; 
+    console.log('Entered OTP:', enteredOTP); // ✅ LOGGING
+  
+    if (enteredOTP.length !== 6 || !/^\d{6}$/.test(enteredOTP)) {
       showToast("Please enter a valid 6 digit OTP", 'error');
       return;
     }
-
+  
     isProcessing.current = true;
     setLoading(true);
-
+  
     try {
       let response = null;
-
+  
       if (fullPhoneNumber) {
         response = await axios.post(
           'https://h7l1568kga.execute-api.ap-south-1.amazonaws.com/dev/verifyOtpMsg91',
           {
             command: 'verifyOtpMsg91',
             otp: enteredOTP,
-            user_phone_number: fullPhoneNumber
+            user_phone_number: fullPhoneNumber,
           },
           {
             headers: {
-              'x-api-key': 'k1xuty5IpZ2oHOEOjgMz57wHfdFT8UQ16DxCFkzk'
-            }
+              'x-api-key': 'k1xuty5IpZ2oHOEOjgMz57wHfdFT8UQ16DxCFkzk',
+            },
           }
         );
       } else if (phone) {
@@ -141,44 +145,40 @@ const LoginVerifyOTPScreen = () => {
           {
             command: 'verifyEmailOtp',
             otp: enteredOTP,
-            email: phone
+            email: phone,
           },
           {
             headers: {
-              'x-api-key': 'k1xuty5IpZ2oHOEOjgMz57wHfdFT8UQ16DxCFkzk'
-            }
+              'x-api-key': 'k1xuty5IpZ2oHOEOjgMz57wHfdFT8UQ16DxCFkzk',
+            },
           }
         );
       } else {
         throw new Error("No valid phone number or email provided.");
       }
+  
       const status = response?.data?.status || response?.data?.type;
       const message = response?.data?.message;
-
+  
       if (status === "success") {
         await createUserSession(userid);
         await handleLoginSuccess(userid);
-
         showToast("Login Successful", 'success');
       } else {
         showToast(message || "Failed to verify OTP. Please try again", 'error');
-        return;
-
       }
     } catch (error) {
-
       const errorMessage =
         error?.response?.data?.message ||
         error?.message ||
         "Something went wrong. Please try again.";
-
       showToast(errorMessage, 'error');
-
     } finally {
       setLoading(false);
       isProcessing.current = false;
     }
   };
+  
 
 
   useEffect(() => {
@@ -197,28 +197,6 @@ const LoginVerifyOTPScreen = () => {
 
     getFcmToken();
   }, []);
-
-  // useEffect(() => {
-  //   const getFcmToken = async () => {
-  //     try {
-  //       const app = getApp();
-  //       const messagingInstance = getMessaging(app);
-  //       const token = await getToken(messagingInstance);
-  //       setFcmToken(token);
-  //       console.log("🔹 FCM Token:", token);
-
-  //       if (Platform.OS === "ios") {
-  //         const iosApnsToken = await messaging().getAPNSToken();
-  //         setApnsToken(iosApnsToken);
-  //         console.log("🍎 APNS Token:", iosApnsToken);
-  //       }
-  //     } catch (error) {
-  //       console.error("❌ Error fetching FCM token:", error);
-  //     }
-  //   };
-
-  //   getFcmToken();
-  // }, []);
 
 
   const createUserSession = async (userId) => {
@@ -456,169 +434,187 @@ const LoginVerifyOTPScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
 
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-        <MaterialIcons name="arrow-left" size={24} color="#075cab" />
-      </TouchableOpacity>
+      <View style={styles.headerContainer}>
 
-      <ScrollView contentContainerStyle={styles.scrollViewContainer} showsVerticalScrollIndicator={false}>
-        <View style={styles.marginVertical} />
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <MaterialIcons name="arrow-left" size={24} color="#075cab" />
+        </TouchableOpacity>
+
+      </View>
+      <View style={styles.scrollViewContainer} showsVerticalScrollIndicator={false}>
         <Text style={styles.infoText}>
-          Enter the OTP sent to: {fullPhoneNumber ? fullPhoneNumber : phone}
+          Enter the OTP sent to: {fullPhoneNumber || phone}
         </Text>
 
-
         <View style={styles.inputContainer}>
-          {otp.map((_, index) => (
-            <TextInput
-              key={index}
-              style={styles.input}
-              // placeholder="•"
-              placeholderTextColor="gray"
-              keyboardType="numeric"
-              onChangeText={(text) => handleOTPChange(index, text)}
-              value={otp[index]}
-              maxLength={1}
-              ref={(ref) => {
-                if (ref) otpInputs.current[index] = ref;
-              }}
-              onKeyPress={(event) => handleKeyPress(event, index)}
-              blurOnSubmit={false}
-              textContentType="oneTimeCode"
-              // autoComplete="sms-otp"
-            />
-          ))}
+          <OtpInput
+            numberOfDigits={6}
+            focusColor="#075cab"
+            autoFocus={true}
+            // hideStick={true}
+            placeholder="•"
+            // blurOnFilled={true}
+            disabled={false}
+            type="numeric"
+            secureTextEntry={false}
+            focusStickBlinkingDuration={500}
+            onTextChange={(text) => {
+              setOTP(text);
+              otpRef.current = text; // ✅ latest OTP
+            }}
+            onFilled={(text) => {
+              setOTP(text);
+              otpRef.current = text;
+              handleVerifyOTP();
+            }}
+          
+            textInputProps={{
+              accessibilityLabel: "One-Time Password",
+            }}
+            textProps={{
+              accessibilityRole: "text",
+              accessibilityLabel: "OTP digit",
+              allowFontScaling: false,
+            }}
+            theme={{
+              containerStyle: styles.otpContainer,
+              pinCodeContainerStyle: styles.pinCodeContainer,
+              pinCodeTextStyle: styles.pinCodeText,
+              focusStickStyle: styles.focusStick,
+              focusedPinCodeContainerStyle: styles.activePinCodeContainer,
+              placeholderTextStyle: styles.placeholderText,
+              filledPinCodeContainerStyle: styles.filledPinCodeContainer,
+              disabledPinCodeContainerStyle: styles.disabledPinCodeContainer,
+            }}
+          />
         </View>
 
-
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', alignContent: 'center' }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', alignContent: 'center' }}>
-
-            {isResendEnabled ? (
-              <TouchableOpacity onPress={resendHandle} style={{
-                padding: 10,
-                // backgroundColor: "#075cab",
-                // width: '100%',
-                justifyContent: 'center',
-                alignItems: 'center',
-                // borderRadius: 20,
-                alignSelf: 'center'
-
-              }}>
-                <Text style={styles.resendButtonText}>Resend OTP</Text>
-              </TouchableOpacity>
-            ) : (
-              <Text style={styles.timerText}>Resend in {timer}</Text>
-            )}
-
-          </View>
-
-          <View>
-            <TouchableOpacity onPress={handleVerifyOTP} style={{
-              // backgroundColor: "#075cab",
-              // width: '100%',
-              justifyContent: 'center',
-              alignItems: 'center',
-              borderRadius: 20,
-              alignSelf: 'flex-end'
-            }}>
-
-              <MaterialIcons name="arrow-right-circle-outline" size={40} color="#075cab" alignSelf='flex-end' />
-
+        <View style={styles.actionsRow}>
+          {isResendEnabled ? (
+            <TouchableOpacity onPress={resendHandle} >
+              <Text style={styles.resendButtonText}>Resend OTP</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          ) : (
+            <Text style={styles.timerText}>Resend in {timer}s</Text>
+          )}
 
-      </ScrollView>
+          <TouchableOpacity onPress={handleVerifyOTP} style={styles.verifyButton}>
+            <MaterialIcons name="arrow-right-circle-outline" size={40} color="#075cab" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <Message1
         visible={showAlert}
         title={alertTitle}
         iconType={alertIconType}
-        onOk={() => {
-          setShowAlert(false);
-
-        }}
+        onOk={() => setShowAlert(false)}
       />
-
     </SafeAreaView>
-
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'white',
     flex: 1,
+    backgroundColor: 'whitesmoke',
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'whitesmoke',
+    elevation: 1,  // for Android
+    shadowColor: '#000',  // shadow color for iOS
+    shadowOffset: { width: 0, height: 1 },  // shadow offset for iOS
+    shadowOpacity: 0.1,  // shadow opacity for iOS
+    shadowRadius: 2,  // shadow radius for iOS
+
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    padding: 10,
   },
   scrollViewContainer: {
-    paddingTop: 50,
-    paddingHorizontal: 25,
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 80,
+    paddingBottom: 40,
+    justifyContent: 'flex-start',
+    
   },
-  marginVertical: {
-    marginVertical: 50,
+  infoText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 30,
+    color: '#333',
+    fontWeight:'500'
+  },
+  inputContainer: {
+    marginBottom: 40,
+    alignItems: 'center',
+  },
+  otpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  pinCodeContainer: {
+    borderWidth: 1.5,
+    borderColor: '#ccc',
+    borderRadius: 10,
+    width: 45,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  activePinCodeContainer: {
+    borderColor: '#075cab',
+  },
+  filledPinCodeContainer: {
+    backgroundColor: '#eaf4ff',
+    borderColor: '#075cab',
+  },
+  disabledPinCodeContainer: {
+    backgroundColor: '#f2f2f2',
+  },
+  pinCodeText: {
+    fontSize: 22,
+    color: '#000',
+    fontWeight: '400',
+  },
+  focusStick: {
+    width: 2,
+    height: 25,
+    backgroundColor: '#075cab',
+  },
+  placeholderText: {
+    color: '#aaa',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
   },
 
   resendButtonText: {
-    fontSize: 18,
+    color: '#075cab',
+    fontSize: 16,
     fontWeight: '500',
-    color: "#075cab",
-    textAlign: 'center',
+    padding:10
 
-  },
-
-
-  infoText: {
-    color: 'black',
-    fontSize: 15,
-    fontWeight: 'bold',
-    marginVertical: 30,
-    textAlign: 'center', // Center align the text
-  },
-  backButton: {
-    padding: 10,
-    alignSelf: 'flex-start'
-  },
-  btn: {
-    fontSize: 18,
-    fontWeight: '500',
-    color: "#075cab",
-    marginBottom: 10,
-  },
-
-  inputContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-evenly',
-    width: '100%',
-    alignSelf: 'center',
-    marginBottom: 20,
-  },
-
-  input: {
-    width: 50,
-    height: 50,
-    borderColor: '#075cab',
-    borderWidth: 1,
-    borderRadius: 10, // More rounded edges
-    fontSize: 24,
-    color: '#075cab', // Darker text for better readability
-    textAlign: 'center',
-    backgroundColor: '#ffffff', // White background for inputs
-    elevation: 3, // Slightly more elevation for depth
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
   timerText: {
-    color: '#075cab',
-    textAlign: 'center',
+    color: '#999',
+    fontSize: 13,
+    padding:10
+
+  },
+  verifyButton: {
+    alignSelf: 'flex-end',
   },
 });
 
 export default LoginVerifyOTPScreen;
-
-
-
-
-
-
-

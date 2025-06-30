@@ -2,28 +2,21 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, Image, ActivityIndicator, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity,
   Modal, Share,
-  TouchableWithoutFeedback,
-  Linking,
-  Alert,
-  Animated
 } from 'react-native';
-import axios from 'axios';
+
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
-import Toast from 'react-native-toast-message';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Video from 'react-native-video';
 import { FlatList } from 'react-native-gesture-handler';
 import { Dimensions } from 'react-native';
 import ContactSupplierModal from '../helperComponents.jsx/ContactsModal';
 import apiClient from '../ApiClient';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import DisclaimerBox from './DisclaimerBox';
 import { useFileOpener } from '../helperComponents.jsx/fileViewer';
 import { useNetwork } from '../AppUtils/IdProvider';
 import { openMediaViewer } from '../helperComponents.jsx/mediaViewer';
 
-const BASE_API_URL = 'https://h7l1568kga.execute-api.ap-south-1.amazonaws.com/dev';
-const API_KEY = 'k1xuty5IpZ2oHOEOjgMz57wHfdFT8UQ16DxCFkzk';
+
 const { width } = Dimensions.get('window');
 
 const RelatedProductDetails = () => {
@@ -221,19 +214,13 @@ const RelatedProductDetails = () => {
 
   const fetchRelatedProducts = async (product, lastKey = null) => {
     try {
-      const response = await axios.post(
-        `${BASE_API_URL}/getRelatedProductsByProductId`,
-        {
-          command: "getRelatedProductsByProductId",
-          product_id: product?.product_id,
-          limit: 5,
-          ...(lastKey && { lastEvaluatedKey: lastKey }),
-        },
-        { headers: { 'x-api-key': API_KEY } }
-      );
-
-
-
+      const response = await apiClient.post('/getRelatedProductsByProductId', {
+        command: 'getRelatedProductsByProductId',
+        product_id: product?.product_id,
+        limit: 5,
+        ...(lastKey && { lastEvaluatedKey: lastKey }),
+      });
+  
       if (
         response.data &&
         response.data.status === 'success' &&
@@ -241,24 +228,26 @@ const RelatedProductDetails = () => {
       ) {
         const allProducts = response.data.response;
         const newLastKey = response.data.lastEvaluatedKey || null;
-
+  
         if (!allProducts.length) {
-
-          setLastEvaluatedKey(null);
+          setLastEvaluatedKey(null); // Stop further pagination
           return;
         }
-
+  
         const updatedProducts = await fetchRelatedProductImages(allProducts);
-
-        setRelatedProducts((prev) => lastKey ? [...prev, ...updatedProducts] : updatedProducts);
-
+  
+        setRelatedProducts((prev) =>
+          lastKey ? [...prev, ...updatedProducts] : updatedProducts
+        );
         setLastEvaluatedKey(newLastKey);
       } else {
-
         setLastEvaluatedKey(null);
       }
     } catch (error) {
-      console.error('❌ Error fetching related products:', error.response?.data || error.message);
+      console.error(
+        '❌ Error fetching related products:',
+        error.response?.data || error.message
+      );
     }
   };
 
@@ -266,23 +255,19 @@ const RelatedProductDetails = () => {
 
   const fetchRelatedProductImages = async (products) => {
     if (!products || products.length === 0) return products;
-
+  
     const updatedProducts = await Promise.all(
       products.map(async (product) => {
         if (!product.images || product.images.length === 0) {
           return { ...product, imageUrl: null };
         }
-
+  
         try {
-          const imgRes = await axios.post(
-            `${BASE_API_URL}/getObjectSignedUrl`,
-            {
-              command: 'getObjectSignedUrl',
-              key: product.images[0], // First image
-            },
-            { headers: { 'x-api-key': API_KEY } }
-          );
-
+          const imgRes = await apiClient.post('/getObjectSignedUrl', {
+            command: 'getObjectSignedUrl',
+            key: product.images[0], // First image
+          });
+  
           return { ...product, imageUrl: imgRes.data || null };
         } catch (error) {
           console.error('Error fetching image URL for related product:', error);
@@ -290,7 +275,7 @@ const RelatedProductDetails = () => {
         }
       })
     );
-
+  
     return updatedProducts;
   };
 
@@ -298,17 +283,15 @@ const RelatedProductDetails = () => {
 
   const fetchImageUrls = async (images) => {
     if (!images || images.length === 0) return;
-
+  
     const urls = await Promise.all(
       images.map(async (imageKey) => {
         try {
-          const imgRes = await axios.post(`${BASE_API_URL}/getObjectSignedUrl`, {
+          const imgRes = await apiClient.post('/getObjectSignedUrl', {
             command: 'getObjectSignedUrl',
             key: imageKey,
-          }, {
-            headers: { 'x-api-key': API_KEY },
           });
-
+  
           return imgRes.data || null;
         } catch (error) {
           console.error('Error fetching image URL:', error);
@@ -316,24 +299,22 @@ const RelatedProductDetails = () => {
         }
       })
     );
-
+  
     setImageUrls(urls.filter(url => url !== null));
-    // console.log('Fetched image URLs:', urls); 
+    // console.log('Fetched image URLs:', urls);
   };
 
   const fetchVideoUrls = async (videos) => {
     if (!videos || videos.length === 0) return;
-
+  
     const urls = await Promise.all(
       videos.map(async (videoKey) => {
         try {
-          const videoRes = await axios.post(`${BASE_API_URL}/getObjectSignedUrl`, {
+          const videoRes = await apiClient.post('/getObjectSignedUrl', {
             command: 'getObjectSignedUrl',
             key: videoKey,
-          }, {
-            headers: { 'x-api-key': API_KEY },
           });
-
+  
           return videoRes.data || null;
         } catch (error) {
           console.error('Error fetching video URL:', error);
@@ -341,24 +322,22 @@ const RelatedProductDetails = () => {
         }
       })
     );
-
+  
     setVideoUrls(urls.filter(url => url !== null));
-    // console.log('Fetched video URLs:', urls); 
+    // console.log('Fetched video URLs:', urls);
   };
 
   const fetchPdfUrls = async (files) => {
     if (!files || files.length === 0) return;
-
+  
     const urls = await Promise.all(
       files.map(async (fileKey) => {
         try {
-          const fileRes = await axios.post(`${BASE_API_URL}/getObjectSignedUrl`, {
+          const fileRes = await apiClient.post('/getObjectSignedUrl', {
             command: 'getObjectSignedUrl',
             key: fileKey,
-          }, {
-            headers: { 'x-api-key': API_KEY },
           });
-
+  
           return fileRes.data || null;
         } catch (error) {
           console.error('Error fetching PDF URL:', error);
@@ -366,7 +345,7 @@ const RelatedProductDetails = () => {
         }
       })
     );
-
+  
     setPdfUrls(urls.filter(url => url !== null));
   };
 

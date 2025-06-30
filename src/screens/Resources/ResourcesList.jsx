@@ -18,9 +18,9 @@ import { useFileOpener } from "../helperComponents.jsx/fileViewer";
 
 import { useConnection } from "../AppUtils/ConnectionProvider";
 import AppStyles from "../../assets/AppStyles";
-import { getTimeDisplay } from "../helperComponents.jsx/signedUrls";
+import { getTimeDisplay, highlightMatch } from "../helperComponents.jsx/signedUrls";
 import { openMediaViewer } from "../helperComponents.jsx/mediaViewer";
-import { ForumBody } from "../Forum/forumBody";
+import { ForumBody, generateHighlightedHTML } from "../Forum/forumBody";
 import { EventRegister } from "react-native-event-listeners";
 
 const videoExtensions = [
@@ -77,11 +77,9 @@ const ResourcesList = ({ navigation, route }) => {
     const [hasMorePosts, setHasMorePosts] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [searchTriggered, setSearchTriggered] = useState(false);
-    const [suggestions, setSuggestions] = useState([]);
-    const [suggestionsLimit, setSuggestionsLimit] = useState(5);
-    const [allJobsData, setAllJobsData] = useState([]);
     const [fetchLimit, setFetchLimit] = useState(1);
-
+    const bottomSheetRef = useRef(null);
+    const [expandedTexts, setExpandedTexts] = useState({});
     const { openFile } = useFileOpener();
     const [loading1, setLoading1] = useState(false);
 
@@ -122,66 +120,6 @@ const ResourcesList = ({ navigation, route }) => {
             EventRegister.removeEventListener(listener);
             console.log('[onResourcePostCreated] Listener removed');
         };
-    }, []);
-
-
-
-
-    const getFuzzySuggestions = (inputText) => {
-        const fuse = new Fuse(allJobsData, {
-            keys: ['resource_body', 'title'],
-            threshold: 0.5,
-            distance: 100,
-        });
-
-        const results = fuse.search(inputText);
-        const uniqueMap = new Map();
-
-        results.forEach(res => {
-            const { resource_body, title } = res.item;
-            const key = `${resource_body}|${title}`;
-
-            if (!uniqueMap.has(key)) {
-                uniqueMap.set(key, res.item);
-            }
-        });
-
-        return Array.from(uniqueMap.values());
-    };
-
-
-
-    const handleInputChange = (text) => {
-        setSearchQuery(text);
-        setSuggestionsLimit(5);
-
-        if (text.trim() === '') {
-            setSuggestions([]);
-            return;
-        }
-        const matchedSuggestions = getFuzzySuggestions(text);
-        setSuggestions(matchedSuggestions);
-
-    };
-
-    const fetchAllResources = async () => {
-        try {
-            const requestData = { command: 'getAllResourcePosts' };
-            const res = await apiClient.post('/getAllResourcePosts', requestData);
-            const jobPosts = res?.data?.response || [];
-
-            setAllJobsData(jobPosts);
-
-        } catch (error) {
-
-        } finally {
-
-        }
-    };
-
-
-    useEffect(() => {
-        fetchAllResources();
     }, []);
 
     const withTimeout = (promise, timeout = 10000) => {
@@ -380,10 +318,7 @@ const ResourcesList = ({ navigation, route }) => {
     }, [isFocused]);
 
 
-    const bottomSheetRef = useRef(null);
 
-    const [expandedPosts, setExpandedPosts] = useState({});
-    const [expandedTexts, setExpandedTexts] = useState({});
 
     const toggleFullText = (forumId) => {
         setExpandedTexts((prev) => ({
@@ -392,26 +327,11 @@ const ResourcesList = ({ navigation, route }) => {
         }));
     };
 
-    // const toggleFullText = (id) => {
-    //     setExpandedTexts(prev => ({
-    //       ...prev,
-    //       [id]: !prev[id],
-    //     }));
-    //   };
-
-    const getText1 = (text, forumId) => {
-        if (expandedPosts[forumId] || text.length <= 200) {
-            return text;
-        }
-        return text.slice(0, 200) + ' ...';
-    };
-
-
 
 
     const handleNavigate = (item) => {
         if (bottomSheetRef.current) {
-            bottomSheetRef.current.close(); // Close the RBSheet before navigating
+            bottomSheetRef.current.close();
         }
 
         if (item.user_type === "company") {
@@ -515,10 +435,11 @@ const ResourcesList = ({ navigation, route }) => {
                     </View>
 
                     <View style={{ paddingHorizontal: 15, marginVertical: 5 }}>
-                        <Text style={styles.title1}>{item?.title}</Text>
+                        {/* <Text style={styles.title1}>{item?.title}</Text> */}
+                        <Text numberOfLines={1} style={styles.title1}>{highlightMatch(item?.title || '', searchQuery)}</Text>
 
                         <ForumBody
-                            html={item.resource_body}
+                            html={generateHighlightedHTML(item.resource_body, searchQuery)}
                             forumId={item.resource_id}
                             isExpanded={expandedTexts[item.resource_id]}
                             toggleFullText={toggleFullText}
@@ -583,7 +504,7 @@ const ResourcesList = ({ navigation, route }) => {
                 </View>
             </TouchableOpacity>
         );
-    }, [activeVideo, expandedTexts, toggleFullText, shareResource, handleNavigate, openMediaViewer, handleOpenResume]);
+    }, [activeVideo, expandedTexts,]);
 
     const searchInputRef = useRef(null);
     const isRefreshingRef = useRef(false);
@@ -607,10 +528,8 @@ const ResourcesList = ({ navigation, route }) => {
         if (searchInputRef.current) {
             searchInputRef.current.blur();
         }
-        setSuggestions([]);
-        setSearchTriggered(false);
 
-        setExpandedPosts(false);
+        setSearchTriggered(false);
         setLocalPosts([]);
         setHasMorePosts(true);
         setLastEvaluatedKey(null);
@@ -629,6 +548,30 @@ const ResourcesList = ({ navigation, route }) => {
         }, 5000);
     }, [fetchPosts]);
 
+
+    const debounceTimeout = useRef(null);
+
+  const handleDebouncedTextChange = useCallback((text) => {
+    setSearchQuery(text);
+
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+    }
+
+    const trimmedText = text.trim();
+
+    if (trimmedText === '') {
+      setSearchTriggered(false);
+      setSearchResults([]);
+      return;
+    }
+    
+    debounceTimeout.current = setTimeout(() => {
+      handleSearch(trimmedText);  
+    }, 300);
+  }, [handleSearch]);
+
+
     const handleSearch = async (text) => {
         if (!isConnected) {
             showToast('No internet connection', 'error')
@@ -638,12 +581,9 @@ const ResourcesList = ({ navigation, route }) => {
         const trimmedText = text.trim();
 
         if (trimmedText === '') {
-
+            setSearchResults([]);
             return;
         }
-        setSearchTriggered(true);
-        setLoading(true);
-        setSuggestions([]);
 
         try {
             const requestData = {
@@ -655,7 +595,6 @@ const ResourcesList = ({ navigation, route }) => {
             const forumPosts = res.data.response || [];
             const count = res.data.count || forumPosts.length;
 
-            // ✅ Reuse existing media fetch function
             const postsWithMedia = await Promise.all(
                 forumPosts.map((post) => fetchMediaForPost(post))
             );
@@ -663,9 +602,9 @@ const ResourcesList = ({ navigation, route }) => {
             setSearchResults(postsWithMedia);
 
         } catch (error) {
-            // Handle error if needed
+
         } finally {
-            setLoading(false);
+            setSearchTriggered(true);
         }
 
     };
@@ -691,16 +630,7 @@ const ResourcesList = ({ navigation, route }) => {
                                 placeholder="Search"
                                 placeholderTextColor="gray"
                                 value={searchQuery}
-                                onChangeText={handleInputChange}
-                                onSubmitEditing={() => {
-                                    if (searchQuery.trim() !== '') {
-                                        handleSearch(searchQuery);
-                                        setSearchTriggered(true);
-                                        setSuggestions([]);
-                                        searchInputRef.current?.blur();
-                                    }
-                                }}
-                                returnKeyType="search"
+                                onChangeText={handleDebouncedTextChange}
                             />
                             {searchQuery.trim() !== '' ? (
                                 <TouchableOpacity
@@ -708,7 +638,6 @@ const ResourcesList = ({ navigation, route }) => {
                                         setSearchQuery('');
                                         setSearchTriggered(false);
                                         setSearchResults([]);
-                                        setSuggestions([]);
 
                                     }}
                                     style={styles.iconButton}
@@ -717,15 +646,7 @@ const ResourcesList = ({ navigation, route }) => {
                                 </TouchableOpacity>
                             ) : (
                                 <TouchableOpacity
-                                    // onPress={() => {
-                                    //   if (searchQuery.trim() !== '') {
-                                    //     handleSearch(searchQuery);
-                                    //     setSearchTriggered(true);
-                                    //     setSuggestions([]);
-                                    //     searchInputRef.current?.blur();
 
-                                    //   }
-                                    // }}
                                     style={styles.searchIconButton}
                                 >
                                     <Icon name="magnify" size={20} color="#075cab" />
@@ -741,54 +662,12 @@ const ResourcesList = ({ navigation, route }) => {
                     </TouchableOpacity>
 
                 </View>
-                {suggestions.length > 0 && (
-                    <ScrollView
-                        style={styles.suggestionContainer}
-                        keyboardShouldPersistTaps="handled"
-                        contentContainerStyle={{ backgroundColor: '#fff' }}
-                    >
-                        {suggestions.slice(0, suggestionsLimit).map((item, index) => (
-                            <TouchableOpacity
-                                key={index}
-                                onPress={() => {
-                                    setSearchQuery(`${item.title} - ${item.resource_body}`);
-                                    handleSearch(item.title, item.resource_body);
-                                    setSuggestions([]);
-                                    setSuggestionsLimit(5);
-                                    searchInputRef.current?.blur();
-                                }}
-                                style={styles.suggestionItem}
-                            >
-                                <Text style={styles.suggestionTitle}>
-                                    {item?.title.length > 100
-                                        ? `${item?.title.slice(0, 40)}...`
-                                        : item?.title}
-                                </Text>
-                                <Text style={styles.suggestionJob}>
-                                    {item?.resource_body.length > 100
-                                        ? `${item?.resource_body.slice(0, 40)}...`
-                                        : item?.resource_body}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
 
-
-                        {suggestions.length > suggestionsLimit && (
-                            <TouchableOpacity
-                                onPress={() => setSuggestionsLimit(suggestionsLimit + 5)}
-                                style={styles.loadMoreButton}
-                            >
-                                <Text style={styles.loadMoreText}>Load More</Text>
-                            </TouchableOpacity>
-                        )}
-                    </ScrollView>
-
-                )}
                 <TouchableWithoutFeedback
                     onPress={() => {
                         Keyboard.dismiss();
                         searchInputRef.current?.blur?.();
-                        setSuggestions([]);
+
                     }}
                 >
                     {!loading ? (
@@ -800,7 +679,7 @@ const ResourcesList = ({ navigation, route }) => {
                             onScrollBeginDrag={() => {
                                 Keyboard.dismiss();
                                 searchInputRef.current?.blur?.();
-                                setSuggestions([]);
+
                             }}
                             keyExtractor={(item, index) => `${item.resource_id}-${index}`}
                             onViewableItemsChanged={onViewableItemsChanged}
@@ -835,7 +714,7 @@ const ResourcesList = ({ navigation, route }) => {
                                 }
                             }}
                             onEndReachedThreshold={0.5}
-                            contentContainerStyle={{ paddingBottom: 120 }}
+                            contentContainerStyle={{ paddingBottom: '20%' }}
                             style={styles.scrollView}
                         />
                     ) : (
@@ -851,53 +730,6 @@ const ResourcesList = ({ navigation, route }) => {
 
 
 const styles = StyleSheet.create({
-
-    suggestionContainer: {
-        position: 'absolute',
-        top: 50, // adjust depending on your header/search bar height
-        width: '95%',
-        alignSelf: 'center',
-        maxHeight: '45%',
-        backgroundColor: '#fff',
-        borderRadius: 8,
-        paddingVertical: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 5,
-        zIndex: 999,
-    },
-    suggestionItem: {
-        padding: 7,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
-    },
-    viewResumeText: {
-        textAlign: 'center',
-        color: '#075cab',
-        fontSize: 14,
-        fontWeight: "500",
-    },
-    loadMoreButton: {
-        padding: 12,
-        alignItems: 'center',
-
-    },
-
-    loadMoreText: {
-        color: '#075cab',
-        fontWeight: 'bold',
-    },
-
-    suggestionTitle: {
-        fontSize: 14,
-        color: 'black'
-    },
-    suggestionJob: {
-        fontSize: 12,
-        color: '#888'
-    },
 
     scrollView: {
         flex: 1,

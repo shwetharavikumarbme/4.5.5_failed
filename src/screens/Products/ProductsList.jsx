@@ -19,7 +19,8 @@ import Fuse from 'fuse.js';
 import { EventRegister } from 'react-native-event-listeners';
 import { useConnection } from '../AppUtils/ConnectionProvider';
 import AppStyles from '../../assets/AppStyles';
-import { getSignedUrl } from '../helperComponents.jsx/signedUrls';
+import { getSignedUrl, highlightMatch, useLazySignedUrls } from '../helperComponents.jsx/signedUrls';
+import FastImage from 'react-native-fast-image';
 
 
 const JobListScreen = React.lazy(() => import('../Job/JobListScreen'));
@@ -63,15 +64,11 @@ const ProductsList = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [searchResults, setSearchResults] = useState(false);
     const [searchTriggered, setSearchTriggered] = useState(false);
-    const [suggestions, setSuggestions] = useState([]);
-    const [suggestionsLimit, setSuggestionsLimit] = useState(5);
-
     const [filteredCategories, setFilteredCategories] = useState([]);
     const [selectedCategories, setSelectedCategories] = useState({});
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const [fetchLimit, setFetchLimit] = useState(3);
+    const [fetchLimit, setFetchLimit] = useState(20);
     const filterSlideAnim = useRef(new Animated.Value(500)).current;
-    const [allProducts, setAllProducts] = useState();
     const flatListRef = useRef(null);
     const scrollOffsetY = useRef(0);
 
@@ -125,65 +122,6 @@ const ProductsList = () => {
 
 
 
-
-
-
-    const fetchAllProducts = async () => {
-        try {
-            const requestData = { command: 'getAllProducts' };
-            const res = await apiClient.post('/getAllProducts', requestData);
-            const Allproducts = res?.data?.response || [];
-
-            setAllProducts(Allproducts);
-
-        } catch (error) {
-
-        } finally {
-            setLoading(false);
-        }
-    };
-
-
-    useEffect(() => {
-        fetchAllProducts();
-    }, []);
-
-    const getFuzzySuggestions = (inputText) => {
-        const fuse = new Fuse(allProducts, {
-            keys: ['title', 'category', 'company_name'],
-            threshold: 0.5,
-            distance: 100,
-        });
-
-        const results = fuse.search(inputText);
-        const uniqueMap = new Map();
-
-        results.forEach(res => {
-            const { title, category, company_name } = res.item;
-            const key = `${title}|${category}|${company_name}`;
-
-            if (!uniqueMap.has(key)) {
-                uniqueMap.set(key, res.item);
-            }
-        });
-
-        return Array.from(uniqueMap.values());
-    };
-
-    const handleInputChange = (text) => {
-        setSearchQuery(text);
-        setSuggestionsLimit(5);
-
-        if (text.trim() === '') {
-            setSuggestions([]);
-            return;
-        }
-
-        const matchedSuggestions = getFuzzySuggestions(text);
-        setSuggestions(matchedSuggestions);
-    };
-
-
     const handleScroll = (event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
         scrollOffsetY.current = offsetY;
@@ -229,49 +167,56 @@ const ProductsList = () => {
     ).current;
 
     const clearFilters = () => {
-        if (Object.keys(selectedCategories).length > 0) {
-            setSelectedCategories({});
-            handleRefresh();
-        }
-        setIsFilterOpen(false);
-        searchInputRef.current?.blur();
+        const hadFilters = Object.keys(selectedCategories).length > 0;
 
+        setSelectedCategories({});
+        setTempSelectedCategories({});
+        setIsFilterOpen(false);
+
+        if (hadFilters) {
+            setSearchResults([]);
+            setSearchTriggered(false);
+            fetchProducts(); // fallback to all
+        }
     };
 
-    const applyFilters = () => {
-        const selectedCategoryKeys = selectedCategories
-            ? Object.keys(selectedCategories).filter((key) => selectedCategories[key])
-            : [];
 
-        console.log('Applying filters with selected categories:', selectedCategoryKeys);
+
+    const applyFilters = () => {
+        const selectedCategoryKeys = Object.keys(tempSelectedCategories).filter((key) => tempSelectedCategories[key]);
 
         setIsFilterOpen(false);
 
         if (selectedCategoryKeys.length === 0) {
-            handleSearch("", {});
             return;
         }
 
-        handleSearch(searchQuery || "", selectedCategories);
-        searchInputRef.current?.blur();
+        setSearchResults([]); // clear old
+        setSearchTriggered(false);
 
+        setSelectedCategories(tempSelectedCategories); // apply
+        handleSearch(searchQuery || '', tempSelectedCategories);
     };
+
+
 
 
     const handleFilterClick = () => {
-        setSuggestions([]);
+        setTempSelectedCategories(selectedCategories); // clone only when panel opens
         setFilteredCategories(categories);
-        setIsFilterOpen(prevState => !prevState);
+        setIsFilterOpen(prev => !prev);
         searchInputRef.current?.blur();
     };
 
-    const toggleCheckbox = (category) => {
-        setSelectedCategories((prev) => {
-            const updatedCategories = { ...prev, [category]: !prev[category] };
+    const [tempSelectedCategories, setTempSelectedCategories] = useState({});
 
-            return updatedCategories;
-        });
+    const toggleCheckbox = (category) => {
+        setTempSelectedCategories((prev) => ({
+            ...prev,
+            [category]: !prev[category],
+        }));
     };
+
     const categories = [
         "3D Printing in Healthcare", "Biomedical Research Equipment", "Biomedical Sensors & Components",
         "Biomedical Testing Equipment", "Biotechnology & Life Sciences", "Healthcare & Hospital Services",
@@ -287,51 +232,55 @@ const ProductsList = () => {
         ]);
     };
 
-    const fetchProducts = async (lastKey = null,) => {
-        if (!isConnected) {
+    const [companyCount, setCompanyCount] = useState(0);
 
-            return;
-        }
-        if (loading || loadingMore) return;
+    const fetchProducts = async (lastKey = null) => {
+        if (!isConnected || loading || loadingMore) return;
+
         lastKey ? setLoadingMore(true) : setLoading(true);
-
         const startTime = Date.now();
 
         try {
             const requestData = {
                 command: "getAllProducts",
-                limit: lastKey ? fetchLimit : 4,
+                limit: fetchLimit,
                 ...(lastKey && { lastEvaluatedKey: lastKey }),
             };
 
             const res = await withTimeout(apiClient.post('/getAllProducts', requestData), 10000);
-
             const newProducts = res?.data?.response || [];
+            setCompanyCount(res.data.count);
 
             if (!newProducts.length) {
                 setLastEvaluatedKey(null);
                 return;
             }
 
+            // ⏱️ Adjust fetchLimit based on response time
             const responseTime = Date.now() - startTime;
-
             if (responseTime < 400) {
                 setFetchLimit(prev => Math.min(prev + 5, 10));
             } else if (responseTime > 1000) {
                 setFetchLimit(prev => Math.max(prev - 2, 1));
             }
 
-            setProducts(prev => lastKey ? [...prev, ...newProducts] : newProducts);
+            // 🧠 Avoid duplicates
+            setProducts(prev => {
+                const existingIds = new Set(prev.map(p => p.product_id));
+                const uniqueNew = newProducts.filter(p => !existingIds.has(p.product_id));
+                return [...prev, ...uniqueNew];
+            });
+
             setLastEvaluatedKey(res.data.lastEvaluatedKey || null);
-            fetchProductImageUrls(newProducts);
+
         } catch (error) {
-            showToast('Slow network', 'info');
-            setLoading(false);
+            // Optional: console.error('❌ fetchProducts error:', error);
         } finally {
             setLoading(false);
             setLoadingMore(false);
         }
     };
+
 
     const fetchProductImageUrls = async (products) => {
         const productsArray = Array.isArray(products) ? products : [products];
@@ -373,52 +322,83 @@ const ProductsList = () => {
 
 
 
+    const debounceTimeout = useRef(null);
+
+    const handleDebouncedTextChange = useCallback((text) => {
+        setSearchQuery(text);
+
+        if (debounceTimeout.current) {
+            clearTimeout(debounceTimeout.current);
+        }
+
+        debounceTimeout.current = setTimeout(() => {
+            const trimmedText = text.trim();
+            const hasFilters = Object.values(selectedCategories).some(Boolean);
+
+            const shouldSearch = trimmedText !== '' || hasFilters;
+
+            if (!shouldSearch) {
+                setSearchTriggered(false);
+                setSearchResults([]);
+                return;
+            }
+
+            handleSearch(trimmedText, selectedCategories);
+        }, 300);
+    }, [handleSearch, selectedCategories]);
+
+
+    const {
+        getUrlFor,
+        onViewableItemsChanged,
+        viewabilityConfig
+    } = useLazySignedUrls(products, getSignedUrl, 5, {
+        idField: 'product_id',
+        fileKeyField: 'images[0]',
+    });
 
 
     const handleSearch = async (text, selectedCategories = {}) => {
- 
         if (!isConnected) {
-           
+            showToast('No internet connection', 'error');
             return;
         }
 
         setSearchQuery(text);
 
-        if (text.trim() === '' && Object.keys(selectedCategories).length === 0) {
+        const isTextEmpty = text.trim() === '';
+        const selectedCategoryKeys = Object.keys(selectedCategories).filter(
+            (key) => selectedCategories[key]
+        );
+
+        if (isTextEmpty && selectedCategoryKeys.length === 0) {
             setSearchTriggered(false);
             setSearchResults([]);
             return;
         }
 
-        setSearchTriggered(true);
-        setLoading(true);
-        searchInputRef.current?.blur();
-
-        const selectedCategoryKeys = Object.keys(selectedCategories).filter(
-            (key) => selectedCategories[key]
-        );
-
         const requestData = {
-            command: "searchProducts",
+            command: 'searchProducts',
             searchQuery: text.trim(),
             categories: selectedCategoryKeys.length > 0 ? selectedCategoryKeys : undefined,
         };
 
         try {
             const res = await withTimeout(apiClient.post('/searchProducts', requestData), 10000);
-            const searchResults = res?.data?.response || [];
+            const products = res?.data?.response || [];
 
-            setSearchResults(searchResults);
+            setSearchResults(products);
             setLastEvaluatedKey(null);
-            fetchProductImageUrls(searchResults);
+            fetchProductImageUrls(products);
+
         } catch (error) {
-            console.error('[handleSearch] Error occurred during search:', error);
+            console.error('[handleSearch] Error occurred during product search:', error);
+            showToast('Something went wrong. Please try again.', 'error');
         } finally {
             setSearchTriggered(true);
-            setLoading(false);
-
         }
     };
+
 
 
 
@@ -436,7 +416,7 @@ const ProductsList = () => {
         setRefreshing(true);
 
         setSearchQuery('');
-        setSuggestions([]);
+
         setSearchTriggered(false);
         setSearchResults([]);
         setLastEvaluatedKey(null);
@@ -462,52 +442,59 @@ const ProductsList = () => {
         }, 100);
     };
 
-    const renderItem = ({ item, index }) => (
-        <TouchableOpacity activeOpacity={1} onPress={() => handleAddProduct(item)} >
-            <View style={styles.card} >
-                <View style={styles.productImageContainer}>
-                    {imageUrls[item.product_id] ? (
-                        <Image source={{ uri: imageUrls[item.product_id] }} style={styles.productImage} />
-                    ) : (
-                        <View style={styles.productImagePlaceholder} />
-                    )}
-                </View>
+    const renderItem = ({ item, index }) => {
+        const imageUrl = getUrlFor(item.product_id);
 
-                <View style={styles.cardContent}>
-                    <View>
-                        <Text numberOfLines={1} style={styles.title}>{item.title || ' '}</Text>
-                        <Text numberOfLines={1} style={styles.category}>{item.specifications.model_name || ' '}</Text>
-                        <Text numberOfLines={1} style={styles.description}>{item.description || ' '}</Text>
-                        <Text numberOfLines={1} style={styles.company}>{item.company_name || ' '}</Text>
+        return (
+            <TouchableOpacity activeOpacity={1} onPress={() => handleAddProduct(item)} >
+                <View style={styles.card} >
+                    <View style={styles.productImageContainer}>
 
-                        {item.price && item.price.trim() !== '' ? (
-                            <View style={styles.priceRow}>
-                                <Text numberOfLines={1} style={styles.price}>₹ {item.price}</Text>
-                            </View>
-                        ) : (
-                            <Text style={styles.category}>₹ Contact Supplier</Text> // Show "Contact Supplier" instead of empty space
-                        )}
-
+                        <FastImage
+                            source={{ uri: imageUrl, priority: FastImage.priority.normal }}
+                            cache="immutable"
+                            style={styles.productImage}
+                            onError={() => { }}
+                        />
                     </View>
 
-                    <TouchableOpacity style={styles.productDetailsContainer} onPress={() => handleAddProduct(item)} activeOpacity={1}>
-                        <Text numberOfLines={1} style={styles.productDetailsText}>View details</Text>
-                    </TouchableOpacity>
+                    <View style={styles.cardContent}>
+                        <View>
+                            {/* <Text numberOfLines={1} style={styles.title}>{item.title || ' '}</Text>
+                        <Text numberOfLines={1} style={styles.category}>{item.specifications.model_name || ' '}</Text>
+                        <Text numberOfLines={1} style={styles.description}>{item.description || ' '}</Text> */}
+                            <Text numberOfLines={1} style={styles.title}>{highlightMatch(item.title || '', searchQuery)}</Text>
+                            <Text numberOfLines={1} style={styles.category}>{highlightMatch(item.specifications.model_name || '', searchQuery)}</Text>
+                            <Text numberOfLines={1} style={styles.description}>{highlightMatch(item.description || '', searchQuery)}</Text>
+                            <Text numberOfLines={1} style={styles.companyName}>{highlightMatch(item.company_name || '', searchQuery)}</Text>
+                            {/* <Text numberOfLines={1} style={styles.companyName}>{highlightMatch(job.company_name || '', searchQuery)}</Text> */}
+
+                            {item.price && item.price.trim() !== '' ? (
+                                <View style={styles.priceRow}>
+                                    <Text numberOfLines={1} style={styles.price}>₹ {item.price}</Text>
+                                </View>
+                            ) : (
+                                <Text style={styles.category}>₹ Contact Supplier</Text> // Show "Contact Supplier" instead of empty space
+                            )}
+
+                        </View>
+
+                        <TouchableOpacity style={styles.productDetailsContainer} onPress={() => handleAddProduct(item)} activeOpacity={1}>
+                            <Text numberOfLines={1} style={styles.productDetailsText}>View details</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
-            </View>
-        </TouchableOpacity>
-    );
+            </TouchableOpacity>
+        )
+    };
 
 
 
     const renderFooter = () => loadingMore ? <ActivityIndicator size="large" color="#075cab" style={{ marginVertical: 10 }} /> : null;
-    const hasFiltersApplied = searchTriggered && (
-        searchQuery.trim() !== '' || Object.keys(selectedCategories).some(key => selectedCategories[key])
-    );
 
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
             <View style={AppStyles.headerContainer}>
                 {/* <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Icon name="arrow-left" size={24} color="#075cab" />
@@ -520,17 +507,7 @@ const ProductsList = () => {
                             ref={searchInputRef}
                             placeholderTextColor="gray"
                             value={searchQuery}
-
-                            onChangeText={handleInputChange}
-                            onSubmitEditing={() => {
-                                if (searchQuery.trim() !== '') {
-                                    handleSearch(searchQuery);
-                                    setSearchTriggered(true);
-                                    setSuggestions([]);
-                                    searchInputRef.current?.blur();
-                                }
-                            }}
-                            returnKeyType="search"
+                            onChangeText={handleDebouncedTextChange}
                         />
                         {searchQuery.trim() !== '' ? (
                             <TouchableOpacity
@@ -538,7 +515,7 @@ const ProductsList = () => {
                                     setSearchQuery('');
                                     setSearchTriggered(false);
                                     setSearchResults([]);
-                                    setSuggestions([]);
+
 
                                 }}
                                 style={AppStyles.iconButton}
@@ -547,15 +524,7 @@ const ProductsList = () => {
                             </TouchableOpacity>
                         ) : (
                             <TouchableOpacity
-                                // onPress={() => {
-                                //     if (searchQuery.trim() !== '') {
-                                //         handleSearch(searchQuery);
-                                //         setSearchTriggered(true);
-                                //         setSuggestions([]);
-                                //         searchInputRef.current?.blur();
 
-                                //     }
-                                // }}
                                 style={AppStyles.searchIconButton}
                             >
                                 <Icon name="magnify" size={20} color="#075cab" />
@@ -572,111 +541,77 @@ const ProductsList = () => {
                 )}
             </View>
 
-            {suggestions.length > 0 && (
 
-                <ScrollView
-                    style={styles.suggestionContainer}
+            {!loading ? (
+                <FlatList
+                    data={searchTriggered ? searchResults : products}
+                    renderItem={renderItem}
+                    onScrollBeginDrag={() => {
+                        Keyboard.dismiss();
+                        searchInputRef.current?.blur?.();
+
+                    }}
                     keyboardShouldPersistTaps="handled"
-                    contentContainerStyle={{ backgroundColor: '#fff' }}
-                >
+                    onViewableItemsChanged={onViewableItemsChanged}
+                    viewabilityConfig={viewabilityConfig}
+                    keyExtractor={(item, index) => `${item.product_id}-${index}`}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.flatListContainer}
+                    onEndReached={() => {
+                        if (lastEvaluatedKey && !loadingMore && !loading) {
+                            fetchProducts(lastEvaluatedKey);
+                        }
+                    }}
+                    ref={flatListRef}
+                    onScroll={handleScroll}
+                    scrollEventThrottle={16}
+                    onEndReachedThreshold={0.5}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+                    }
+                    ListEmptyComponent={
+                        (searchTriggered && searchResults.length === 0) ? (
+                            <View style={{ alignItems: 'center', marginTop: 40 }}>
+                                <Text style={{ fontSize: 16, color: '#666' }}>No products found</Text>
+                            </View>
+                        ) : null
+                    }
+                    ListHeaderComponent={
+                        <View>
+                            {!loading && (
+                                <>
+                                    <Text style={styles.companyCount}>
+                                        {searchTriggered ? `${searchResults.length} products found` : `${companyCount} products found`}
+                                    </Text>
 
-                    {suggestions.slice(0, suggestionsLimit).map((item, index) => (
-                        <TouchableOpacity
-                            key={index}
-                            onPress={() => {
-                                setSearchQuery(`${item.title}, ${item.category}, ${item.company_name}`);
-                                handleSearch(item.title, item.category, item.company_name);
-                                setSuggestions([]);
-                                setSuggestionsLimit(5);
-                                searchInputRef.current?.blur();
-                            }}
-                            style={styles.suggestionItem}
-                        >
+                                    {searchTriggered && searchResults.length > 0 && (
+                                        <Text style={styles.companyCount}>
+                                            Showing results for{" "}
+                                            <Text style={{ fontSize: 18, fontWeight: '600', color: '#075cab' }}>
+                                                "{searchQuery}"
+                                            </Text>
+                                        </Text>
+                                    )}
+                                </>
+                            )}
+                        </View>
+                    }
+                    ListFooterComponent={
+                        loadingMore ? (
+                            <View style={{ paddingVertical: 20 }}>
+                                <ActivityIndicator size="small" color="#075cab" />
+                            </View>
+                        ) : null
+                    }
 
-                            <Text style={styles.suggestionTitle}>{`${item.title}`} - {`${item.category}`}</Text>
-                            <Text style={styles.suggestionJob}>{`${item.company_name}`}</Text>
-
-                        </TouchableOpacity>
-                    ))}
-
-
-                    {suggestions.length > suggestionsLimit && (
-                        <TouchableOpacity
-                            onPress={() => setSuggestionsLimit(suggestionsLimit + 5)}
-                            style={styles.loadMoreButton}
-                        >
-                            <Text style={styles.loadMoreText}>Load More</Text>
-                        </TouchableOpacity>
-                    )}
-                </ScrollView>
-
+                />
+            ) : (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <ActivityIndicator color={'#075cab'} size="large" />
+                </View>
             )}
 
-            <TouchableWithoutFeedback
-                onPress={() => {
-                    Keyboard.dismiss();
-                    searchInputRef.current?.blur?.();  // Optional chaining in case ref is not set yet
-                    setSuggestions([]);
-                }}
 
-            >
-                {!loading ? (
-                    <FlatList
-                        data={hasFiltersApplied ? searchResults : products}
-                        renderItem={renderItem}
-                        onScrollBeginDrag={() => {
-                            Keyboard.dismiss();
-                            searchInputRef.current?.blur?.();
-                            setSuggestions([]);
-                        }}
-                        keyboardShouldPersistTaps="handled"
-                        keyExtractor={(item, index) => `${item.product_id}-${index}`}
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={styles.flatListContainer}
-                        onEndReached={() => {
-                            if (lastEvaluatedKey && !loadingMore && !loading) {
-                                fetchProducts(lastEvaluatedKey);
-                            }
-                        }}
-                        ref={flatListRef}
-                        onScroll={handleScroll}
-                        scrollEventThrottle={16}
-                        onEndReachedThreshold={0.5}
-                        refreshControl={
-                            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-                        }
-                        ListEmptyComponent={
-                            (searchTriggered && searchResults.length === 0) ? (
-                                <View style={{ alignItems: 'center', marginTop: 40 }}>
-                                    <Text style={{ fontSize: 16, color: '#666' }}>No products found</Text>
-                                </View>
-                            ) : null
-                        }
-                        ListHeaderComponent={
-                            <View>
-                                {searchTriggered && searchResults.length > 0 && (
-                                    <Text style={styles.companyCount}>
-                                        {searchResults.length} results found
-                                    </Text>
-                                )}
-                            </View>
-                        }
-                        ListFooterComponent={
-                            loadingMore ? (
-                                <View style={{ paddingVertical: 20 }}>
-                                    <ActivityIndicator size="small" color="#075cab" />
-                                </View>
-                            ) : null
-                        }
-
-                    />
-                ) : (
-                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                        <ActivityIndicator color={'#075cab'} size="large" />
-                    </View>
-                )}
-
-            </TouchableWithoutFeedback>
 
 
             {isFilterOpen && (
@@ -716,16 +651,15 @@ const ProductsList = () => {
                                     onPress={() => toggleCheckbox(item)}
                                     style={styles.checkboxContainer}
                                 >
-                                    <View
-                                        style={[
-                                            styles.checkbox,
-                                            selectedCategories[item] && styles.checkboxChecked,
-                                        ]}
-                                    >
-                                        {selectedCategories[item] && (
+                                    <View style={[
+                                        styles.checkbox,
+                                        tempSelectedCategories[item] && styles.checkboxChecked,
+                                    ]}>
+                                        {tempSelectedCategories[item] && (
                                             <Icon name="check" size={12} color="#fff" />
                                         )}
                                     </View>
+
                                     <Text style={styles.checkboxLabel}>{item}</Text>
                                 </TouchableOpacity>
                             )}
@@ -785,47 +719,7 @@ const ProductsList = () => {
 };
 
 const styles = StyleSheet.create({
-    suggestionContainer: {
-        position: 'absolute',
-        top: 50, // adjust depending on your header/search bar height
-        width: '95%',
-        alignSelf: 'center',
-        maxHeight: '45%',
-        backgroundColor: '#fff',
-        borderRadius: 8,
-        paddingVertical: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 5,
-        zIndex: 999, // ensures it's above FlatList
-    },
 
-    suggestionItem: {
-        padding: 7,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
-    },
-    suggestionTitle: {
-        fontSize: 14,
-        color: 'black'
-    },
-    suggestionJob: {
-        fontSize: 12,
-        color: '#888'
-    },
-
-    loadMoreButton: {
-        padding: 10,
-        alignItems: 'center',
-
-    },
-
-    loadMoreText: {
-        color: '#075cab',
-        fontWeight: 'bold',
-    },
 
     bottomNavContainer: {
         flexDirection: 'row',
@@ -877,10 +771,11 @@ const styles = StyleSheet.create({
         alignSelf: 'flex-start',
     },
     companyCount: {
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: '400',
         color: 'black',
         padding: 5,
+        paddingHorizontal: 15,
     },
 
     category: {

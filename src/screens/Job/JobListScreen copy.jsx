@@ -12,19 +12,19 @@ import ContactSupplierModal from '../helperComponents.jsx/ContactsModal';
 import { showToast } from '../AppUtils/CustomToast';
 import { useNetwork } from '../AppUtils/IdProvider';
 import { openMediaViewer } from '../helperComponents.jsx/mediaViewer';
+import { getSignedUrl } from '../helperComponents.jsx/signedUrls';
 
 const defaultImage = Image.resolveAssetSource(default_image).uri;
 const JobDetailScreen = ({ route }) => {
   const { myId, myData } = useNetwork();
-    const { post_id } = route.params || {};
-    const routePost = route.params?.post;
+  const { post_id, post } = route.params || {};
 
   const [profileCreated, setProfileCreated] = useState(false)
   const navigation = useNavigation();
-  const [post, setPost] = useState([])
+  const [post1, setPost] = useState([])
   const [jobImageUrls, setJobImageUrls] = useState({});
   const [isApplied, setIsApplied] = useState(false);
-  const [isModalVisibleImage, setModalVisibleImage] = useState(false);
+
   const [profile, setProfile] = useState(null);
   const [isModalVisible, setModalVisible] = useState(false);
   const [modalVisible1, setModalVisible1] = useState(false);
@@ -37,13 +37,13 @@ const JobDetailScreen = ({ route }) => {
 
   const fetchProfile1 = async () => {
     if (!myId) return;
-  
+
     try {
       const response = await apiClient.post('/getUserDetails', {
         command: 'getUserDetails',
         user_id: myId,
       });
-  
+
       if (response.data.status === 'success') {
         const profileData = response.data.status_message;
         setProfile(profileData);
@@ -52,7 +52,7 @@ const JobDetailScreen = ({ route }) => {
       console.error('❌ Error in fetchProfile1:', error);
     }
   };
-  
+
 
 
 
@@ -62,7 +62,7 @@ const JobDetailScreen = ({ route }) => {
         command: 'getJobProfiles',
         user_id: myId,
       });
-  
+
       if (response.data.status === 'error') {
         setProfileCreated(false);
       } else if (response.data.status === 'success') {
@@ -74,7 +74,7 @@ const JobDetailScreen = ({ route }) => {
       setProfileCreated(false); // Optional fallback
     }
   };
-  
+
 
 
   useEffect(() => {
@@ -88,90 +88,32 @@ const JobDetailScreen = ({ route }) => {
     ]);
   };
 
-  const fetchJobs = async () => {
-    try {
-      const requestData = {
-        command: 'getJobPost',
-        post_id: post_id,
-      };
-
-      const res = await withTimeout(apiClient.post('/getJobPost', requestData), 5000);
-
-      const hasValidResponse = res.data.response?.length > 0;
-
-      if (hasValidResponse) {
-        const jobData = res.data.response[0];
-        setPost(jobData);
-
-        let imageUrl = defaultImage;
-
-        if (jobData.fileKey) {
-          try {
-            const imgRes = await apiClient.post('/getObjectSignedUrl', {
-              command: 'getObjectSignedUrl',
-              key: jobData.fileKey,
-            });
-            if (imgRes.data) {
-              imageUrl = imgRes.data;
-            }
-          } catch (error) {
-            console.warn('Error fetching image URL, using default:', error);
-          }
-        }
-
-        setJobImageUrls(prevUrls => ({
-          ...prevUrls,
-          [jobData.post_id]: imageUrl,
-        }));
-      } else {
-        setPost({ removed_by_author: true });
-      }
-
-    } catch (error) {
-
-      showToast('Network error', 'error')
-    }
-  };
+  const [imageUrl, setImageUrl] = useState(defaultImage);
 
   useEffect(() => {
-    if (routePost) {
-      console.log('Setting post from route.params:', routePost); // 🟢 LOG: from route
-  
-      setPost(routePost);
-  
-      if (routePost?.fileKey) {
-        (async () => {
-          try {
-            const imgRes = await apiClient.post('/getObjectSignedUrl', {
-              command: 'getObjectSignedUrl',
-              key: routePost.fileKey,
-            });
-            if (imgRes.data) {
-              console.log('Setting image URL from routePost fileKey');
-              setJobImageUrls(prev => ({
-                ...prev,
-                [routePost.post_id]: imgRes.data,
-              }));
-            }
-          } catch (error) {
-            console.warn('Error loading image from routePost:', error);
-          }
-        })();
-      } else {
-        console.log('No fileKey in routePost, using default image');
-        setJobImageUrls(prev => ({
-          ...prev,
-          [routePost.post_id]: defaultImage,
-        }));
+    const fetchUrl = async () => {
+      if (!post?.post_id || !post?.fileKey) return;
+
+      try {
+        const signedUrlMap = await getSignedUrl(post.post_id, post.fileKey);
+        const signedUrl = signedUrlMap[post.post_id];
+
+        if (signedUrl) {
+          setImageUrl(signedUrl);
+        } else {
+          setImageUrl(defaultImage); // fallback
+        }
+      } catch (error) {
+        console.error("Error fetching signed URL", error);
+        setImageUrl(defaultImage); // fallback on error
       }
-    } else {
-      console.log('No routePost found, fetching from API'); // 🟡 LOG: from API
-      fetchJobs();
-    }
-  }, []);
-  
-  
-  
+    };
+
+    fetchUrl();
+  }, [post]);
+
+
+
 
   useEffect(() => {
     fetchAppliedJobs();
@@ -299,17 +241,11 @@ const JobDetailScreen = ({ route }) => {
 
     }
   };
-  
+
   const handleNavigate = (company_id) => {
     navigation.navigate('CompanyDetailsPage', { userId: company_id });
   };
 
-  const toggleModal = useCallback(() => setModalVisibleImage(!isModalVisibleImage), [isModalVisibleImage]);
-
-  const handleCancel = () => {
-    toggleModal(false);
-
-  };
 
   if (!post) {
 
@@ -395,13 +331,13 @@ const JobDetailScreen = ({ route }) => {
               <View style={styles.imageContainer}>
 
                 <TouchableOpacity
-                 onPress={() => openMediaViewer([{ type: 'image', url: jobImageUrls[post?.post_id] }])}
+                  onPress={() => openMediaViewer([{ type: 'image', url: imageUrl }])}
                   activeOpacity={1}
                 >
                   <FastImage
-                    source={{ uri: jobImageUrls[post?.post_id] }}
+                    source={{ uri: imageUrl ? imageUrl : null }}
                     style={styles.detailImage}
-                    resizeMode={jobImageUrls[post?.post_id]?.includes('buliding.jpg') ? 'cover' : 'contain'}
+                    resizeMode={imageUrl?.includes('buliding.jpg') ? 'cover' : 'contain'}
                   />
                 </TouchableOpacity>
 
@@ -608,23 +544,6 @@ const JobDetailScreen = ({ route }) => {
         )}
       </>
 
-
-      <Modal visible={isModalVisibleImage} transparent={true} animationType="slide"
-        onRequestClose={handleCancel}>
-        <View style={styles.modalContainerImage}>
-          <ImageViewer
-            imageUrls={[{ url: jobImageUrls[post?.post_id] }]}
-            enableSwipeDown={true}
-            onSwipeDown={toggleModal}
-            showIndicators={false}
-            renderIndicator={() => null}
-          />
-          <TouchableOpacity onPress={handleCancel} style={styles.closeButton1}>
-            <Icon name="close" size={24} color="white" />
-          </TouchableOpacity>
-
-        </View>
-      </Modal>
 
       <Modal
         transparent={true}
@@ -914,7 +833,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
-    
+
   },
 
 

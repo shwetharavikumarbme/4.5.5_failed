@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, Text, View, FlatList, ActivityIndicator, TouchableOpacity, Linking, Image, SafeAreaView, Keyboard, ScrollView, RefreshControl, useWindowDimensions, Dimensions } from 'react-native';
 import axios from 'axios';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -10,6 +10,7 @@ import dayjs from 'dayjs';
 import Fuse from 'fuse.js';
 import apiClient from '../ApiClient';
 import AppStyles from '../../assets/AppStyles';
+import { highlightMatch } from '../helperComponents.jsx/signedUrls';
 
 
 const AllEvents = () => {
@@ -24,71 +25,13 @@ const AllEvents = () => {
   const [hasMore, setHasMore] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchTriggered, setSearchTriggered] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
-  const [suggestionsLimit, setSuggestionsLimit] = useState(5);
-  const [allJobsData, setAllJobsData] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
-  const getFuzzySuggestions = (inputText) => {
-    const fuse = new Fuse(allJobsData, {
-      keys: ['title'],
-      threshold: 0.5,
-      distance: 100,
-    });
-
-    const results = fuse.search(inputText);
-    const uniqueMap = new Map();
-
-    results.forEach(res => {
-      const { title } = res.item;
-      const key = `${title}`;
-
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, res.item);
-      }
-    });
-
-    return Array.from(uniqueMap.values());
-  };
 
 
-
-  const handleInputChange = (text) => {
-    setSearchQuery(text);
-    setSuggestionsLimit(5);
-
-    if (text.trim() === '') {
-      setSuggestions([]);
-      return;
-    }
-    const matchedSuggestions = getFuzzySuggestions(text);
-    setSuggestions(matchedSuggestions);
-
-  };
-
-  const fetchAllResources = async () => {
-    try {
-      const requestData = { command: 'getAllEvents' };
-      const res = await apiClient.post('/getAllEvents', requestData);
-      const jobPosts = res?.data?.response || [];
-
-      setAllJobsData(jobPosts);
-
-    } catch (error) {
-
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-  useEffect(() => {
-    fetchAllResources();
-  }, []);
 
   const handleRefresh = async () => {
     setHasMore(true);
     setLastKey(null);
-    setSuggestions([]);
     setSearchResults([]);
     setSearchTriggered(false);
     setSearchQuery('');
@@ -130,18 +73,37 @@ const AllEvents = () => {
   };
 
 
+  const debounceTimeout = useRef(null);
+
+  const handleDebouncedTextChange = useCallback((text) => {
+    setSearchQuery(text);
+
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+    }
+
+    const trimmedText = text.trim();
+
+    if (trimmedText === '') {
+      setSearchTriggered(false);
+      setSearchResults([]);
+      return;
+    }
+
+    debounceTimeout.current = setTimeout(() => {
+      handleSearch(trimmedText);  // Call actual search function
+    }, 300);
+  }, [handleSearch]);
 
   const handleSearch = async (text) => {
     const trimmedText = text.trim();
-    setSearchQuery(text); 
+    setSearchQuery(text);
 
     if (!trimmedText) {
 
       return;
     }
-    setLoading(true);
-    setSearchTriggered(true);
-    setSuggestions([]);
+
     try {
       const requestData = {
         command: 'searchEvents',
@@ -164,7 +126,7 @@ const AllEvents = () => {
     } catch (error) {
 
     } finally {
-      setLoading(false);
+      setSearchTriggered(true);
 
     }
   };
@@ -220,7 +182,7 @@ const AllEvents = () => {
 
   const renderItem = ({ item }) => {
     const isExpired = dayjs().isAfter(dayjs(item.end_date));
-  
+
     return (
       <TouchableOpacity
         style={[
@@ -247,9 +209,9 @@ const AllEvents = () => {
             isExpired && styles.expiredText,
           ]}
         >
-          {item.title}
+          {highlightMatch(item.title || '', searchQuery)}
         </Text>
-  
+
         <View style={styles.detailsContainer}>
           <View style={styles.detailItem}>
             <View style={styles.lableIconContainer}>
@@ -261,26 +223,27 @@ const AllEvents = () => {
               {dayjs(item.start_date).format("DD")} to {dayjs(item.end_date).format("DD MMM YYYY")}
             </Text>
           </View>
-  
+
           <View style={styles.detailItem}>
             <View style={styles.lableIconContainer}>
               <Icon name="map-marker" size={18} color="black" style={styles.icon} />
               <Text style={[styles.label, isExpired && styles.expiredText]}>Location</Text>
             </View>
             <Text style={[styles.colon, isExpired && styles.expiredText]}>:</Text>
-            <Text style={[styles.details, isExpired && styles.expiredText]}>{item.location}</Text>
+            <Text style={[styles.details, isExpired && styles.expiredText]}>{highlightMatch(item.location, searchQuery)}</Text>
+            
           </View>
-  
+
           <View style={styles.detailItem}>
             <View style={styles.lableIconContainer}>
               <Icon name="clock" size={18} color="black" style={styles.icon} />
               <Text style={[styles.label, isExpired && styles.expiredText]}>Time</Text>
             </View>
             <Text style={[styles.colon, isExpired && styles.expiredText]}>:</Text>
-            <Text style={[styles.details, isExpired && styles.expiredText]}>{item.time}</Text>
+            <Text style={[styles.details, isExpired && styles.expiredText]}>{highlightMatch(item.time)}</Text>
           </View>
         </View>
-  
+
         {!isExpired && (
           <TouchableOpacity
             onPress={() => Linking.openURL(item.registration_link)}
@@ -292,7 +255,7 @@ const AllEvents = () => {
       </TouchableOpacity>
     );
   };
-  
+
 
 
   if (loading) {
@@ -316,16 +279,8 @@ const AllEvents = () => {
               placeholder="Search"
               placeholderTextColor="gray"
               value={searchQuery}
-              onChangeText={handleInputChange}
-              onSubmitEditing={() => {
-                if (searchQuery.trim() !== '') {
-                  handleSearch(searchQuery);
-                  setSearchTriggered(true);
-                  setSuggestions([]);
-                  searchInputRef.current?.blur();
-                }
-              }}
-              returnKeyType="search"
+              onChangeText={handleDebouncedTextChange}
+
             />
             {searchQuery.trim() !== '' ? (
               <TouchableOpacity
@@ -333,7 +288,6 @@ const AllEvents = () => {
                   setSearchQuery('');
                   setSearchTriggered(false);
                   setSearchResults([]);
-                  setSuggestions([]);
 
                 }}
                 style={AppStyles.iconButton}
@@ -342,15 +296,6 @@ const AllEvents = () => {
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                // onPress={() => {
-                //   if (searchQuery.trim() !== '') {
-                //     handleSearch(searchQuery);
-                //     setSearchTriggered(true);
-                //     setSuggestions([]);
-                //     searchInputRef.current?.blur();
-
-                //   }
-                // }}
                 style={AppStyles.searchIconButton}
               >
                 <Icon name="magnify" size={20} color="#075cab" />
@@ -361,51 +306,13 @@ const AllEvents = () => {
         </View>
       </View>
 
-      {suggestions.length > 0 && (
-        <ScrollView
-          style={styles.suggestionContainer}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ backgroundColor: '#fff' }}
-        >
-          {suggestions.slice(0, suggestionsLimit).map((item, index) => {
-            const words = item?.title.split(/\s+/); // split by spaces
-            const wordToSearch = words[0]; // or use any logic to pick a word
-
-            return (
-              <TouchableOpacity
-                key={index}
-                onPress={() => {
-                  setSearchQuery(wordToSearch);
-                  handleSearch(wordToSearch);
-                  setSuggestions([]);
-                  setSuggestionsLimit(5);
-                  searchInputRef.current?.blur();
-                }}
-                style={styles.suggestionItem}
-              >
-                <Text style={styles.suggestionTitle}>{item?.title}</Text>
-              </TouchableOpacity>
-            );
-          })}
-
-          {suggestions.length > suggestionsLimit && (
-            <TouchableOpacity
-              onPress={() => setSuggestionsLimit(suggestionsLimit + 5)}
-              style={styles.loadMoreButton}
-            >
-              <Text style={styles.loadMoreText}>Load More</Text>
-            </TouchableOpacity>
-          )}
-        </ScrollView>
-      )}
-
 
       <FlatList
         data={!searchTriggered || searchQuery.trim() === '' ? events : searchResults}
         renderItem={renderItem}
         keyExtractor={(item, index) => `${item.event_id}-${index}`}
         onScrollBeginDrag={() => Keyboard.dismiss()}
-        contentContainerStyle={{ padding: 10,paddingBottom:'20%' }}
+        contentContainerStyle={{ padding: 10, paddingBottom: '20%' }}
         onEndReached={() => {
           if (hasMore && !loadingMore) fetchEvents(lastKey);
         }}
@@ -420,6 +327,13 @@ const AllEvents = () => {
         ListFooterComponent={
           loadingMore ? (
             <ActivityIndicator size="small" color="#075cab" style={{ marginVertical: 10 }} />
+          ) : null
+        }
+        ListEmptyComponent={
+          (searchTriggered && searchResults.length === 0) ? (
+            <View style={{ alignItems: 'center', marginTop: 40 }}>
+              <Text style={{ fontSize: 16, color: '#666' }}>No events found</Text>
+            </View>
           ) : null
         }
         ListHeaderComponent={
@@ -439,47 +353,6 @@ const AllEvents = () => {
 };
 
 const styles = StyleSheet.create({
-  suggestionContainer: {
-    position: 'absolute',
-    top: 50, // adjust depending on your header/search bar height
-    width: '95%',
-    alignSelf: 'center',
-    maxHeight: '45%',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingVertical: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 999,
-  },
-  suggestionItem: {
-    padding: 7,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-
-  loadMoreButton: {
-    padding: 12,
-    alignItems: 'center',
-
-  },
-
-  loadMoreText: {
-    color: '#075cab',
-    fontWeight: 'bold',
-  },
-
-  suggestionTitle: {
-    fontSize: 14,
-    color: 'black'
-  },
-  suggestionJob: {
-    fontSize: 12,
-    color: '#888'
-  },
 
   expiredEventContainer: {
     backgroundColor: '#e0e0e0',
@@ -511,8 +384,8 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     overflow: 'hidden',
     marginBottom: 8,
-    padding:8,
-    paddingBottom:15,
+    padding: 8,
+    paddingBottom: 15,
   },
   events: {
     fontSize: 16,
@@ -537,7 +410,7 @@ const styles = StyleSheet.create({
   },
   iconAndTitle: {
     width: '100%',
-    height: 16/9 * Dimensions.get('window').width * 0.3,
+    height: 16 / 9 * Dimensions.get('window').width * 0.3,
     alignItems: 'center',
     paddingVertical: 5
   },
@@ -546,7 +419,7 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 12,
     marginBottom: 10,
-    
+
   },
   detailsContainer: {
     marginBottom: 15,
@@ -616,8 +489,8 @@ const styles = StyleSheet.create({
     padding: 10
 
   },
-  
-  
+
+
 });
 
 export default AllEvents;

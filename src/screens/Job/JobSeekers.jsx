@@ -33,66 +33,7 @@ const CompanyListJobCandidates = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchTriggered, setSearchTriggered] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
-  const [suggestions, setSuggestions] = useState([]);
-  const [suggestionsLimit, setSuggestionsLimit] = useState(5);
 
-  const [allJobsData, setAllJobsData] = useState([]);
-
-  const fetchAllJobSeekers = async () => {
-    try {
-      const requestData = { command: 'getAllJobProfiles' };
-      const res = await apiClient.post('/getAllJobProfiles', requestData);
-      const jobPosts = res?.data?.response || [];
-
-      setAllJobsData(jobPosts);
-
-    } catch (error) {
-
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-  useEffect(() => {
-    fetchAllJobSeekers();
-  }, []);
-
-  const getFuzzySuggestions = (inputText) => {
-    const fuse = new Fuse(allJobsData, {
-      keys: ['expert_in', 'user_category', 'preferred_cities'],
-      threshold: 0.5,
-      distance: 100,
-    });
-
-    const results = fuse.search(inputText);
-    const uniqueMap = new Map();
-
-    results.forEach(res => {
-      const { expert_in, user_category, preferred_cities } = res.item;
-      const key = `${expert_in}|${user_category}|${preferred_cities}`;
-
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, res.item);
-      }
-    });
-
-    return Array.from(uniqueMap.values());
-  };
-
-
-
-  const handleInputChange = (text) => {
-    setSearchQuery(text);
-    setSuggestionsLimit(5);
-
-    if (text.trim() === '') {
-      setSuggestions([]);
-      return;
-    }
-    const matchedSuggestions = getFuzzySuggestions(text);
-    setSuggestions(matchedSuggestions);
-  };
 
 
   const withTimeout = (promise, timeout = 10000) => {
@@ -102,6 +43,35 @@ const CompanyListJobCandidates = () => {
     ]);
   };
 
+   const debounceTimeout = useRef(null);
+  
+    const handleDebouncedTextChange = useCallback((text) => {
+      setSearchQuery(text);
+    
+      if (debounceTimeout.current) {
+        clearTimeout(debounceTimeout.current);
+      }
+    
+      const trimmedText = text.trim();
+    
+      if (trimmedText === '') {
+        setSearchTriggered(false);
+        setSearchResults([]);
+        return;
+      }
+    
+      if (trimmedText.length < 3) {
+        setSearchTriggered(false);
+        setSearchResults([]);
+        return;
+      }
+    
+      debounceTimeout.current = setTimeout(() => {
+        handleSearch(trimmedText);  // Call actual search function
+      }, 300);
+    }, [handleSearch]);
+    
+  
   const handleSearch = async (text) => {
     if (!isConnected) {
       showToast('No internet connection', 'error')
@@ -113,10 +83,6 @@ const CompanyListJobCandidates = () => {
       setSearchResults([]);
       return;
     }
-    setSearchTriggered(true);
-
-    setLoading(true);
-    setSuggestions([]);
 
     try {
       const requestData = {
@@ -136,8 +102,8 @@ const CompanyListJobCandidates = () => {
     } catch (error) {
 
     } finally {
+      setSearchTriggered(true);
 
-      setLoading(false);
     }
   };
 
@@ -324,16 +290,8 @@ const CompanyListJobCandidates = () => {
               placeholder="Search"
               placeholderTextColor="gray"
               value={searchQuery}
-              onChangeText={handleInputChange}
-              onSubmitEditing={() => {
-                if (searchQuery.trim() !== '') {
-                  handleSearch(searchQuery);
-                  setSearchTriggered(true);
-                  setSuggestions([]);
-                  searchInputRef.current?.blur();
-                }
-              }}
-              returnKeyType="search"
+              onChangeText={handleDebouncedTextChange}
+
             />
             {searchQuery.trim() !== '' ? (
               <TouchableOpacity
@@ -341,7 +299,7 @@ const CompanyListJobCandidates = () => {
                   setSearchQuery('');
                   setSearchTriggered(false);
                   setSearchResults([]);
-                  setSuggestions([]);
+            
 
                 }}
                 style={AppStyles.iconButton}
@@ -350,15 +308,7 @@ const CompanyListJobCandidates = () => {
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                // onPress={() => {
-                //   if (searchQuery.trim() !== '') {
-                //     handleSearch(searchQuery);
-                //     setSearchTriggered(true);
-                //     setSuggestions([]);
-                //     searchInputRef.current?.blur();
-
-                //   }
-                // }}
+        
                 style={AppStyles.searchIconButton}
               >
                 <Icon name="magnify" size={20} color="#075cab" />
@@ -369,49 +319,6 @@ const CompanyListJobCandidates = () => {
         </View>
       </View>
 
-      {suggestions.length > 0 && (
-        <ScrollView
-          style={styles.suggestionContainer}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ backgroundColor: '#fff' }}
-        >
-          {suggestions.slice(0, suggestionsLimit).map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              onPress={() => {
-                setSearchQuery(`${item.expert_in} - ${item.preferred_cities}`);
-                handleSearch(item.expert_in, item.preferred_cities);
-                setSuggestions([]);
-                setSuggestionsLimit(5);
-                searchInputRef.current?.blur();
-              }}
-              style={styles.suggestionItem}
-            >
-              <Text style={styles.suggestionTitle}>{`${item.expert_in}`}</Text>
-              <Text style={styles.suggestionJob}>{`${item.preferred_cities}`}</Text>
-
-            </TouchableOpacity>
-          ))}
-
-
-          {suggestions.length > suggestionsLimit && (
-            <TouchableOpacity
-              onPress={() => setSuggestionsLimit(suggestionsLimit + 5)}
-              style={styles.loadMoreButton}
-            >
-              <Text style={styles.loadMoreText}>Load More</Text>
-            </TouchableOpacity>
-          )}
-        </ScrollView>
-
-      )}
-      <TouchableWithoutFeedback
-        onPress={() => {
-          Keyboard.dismiss();
-          searchInputRef.current?.blur?.();
-          setSuggestions([]);
-        }}
-      >
 
         {!loading ? (
           <FlatList
@@ -457,53 +364,11 @@ const CompanyListJobCandidates = () => {
           </View>
         )}
 
-      </TouchableWithoutFeedback>
     </SafeAreaView>
   );
 
 }
 const styles = StyleSheet.create({
-  suggestionContainer: {
-    position: 'absolute',
-    top: 50, // adjust depending on your header/search bar height
-    width: '95%',
-    alignSelf: 'center',
-    maxHeight: '45%',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingVertical: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 999,
-  },
-  suggestionItem: {
-    padding: 7,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-
-  loadMoreButton: {
-    padding: 12,
-    alignItems: 'center',
-
-  },
-
-  loadMoreText: {
-    color: '#075cab',
-    fontWeight: 'bold',
-  },
-
-  suggestionTitle: {
-    fontSize: 14,
-    color: 'black'
-  },
-  suggestionJob: {
-    fontSize: 12,
-    color: '#888'
-  },
 
   container: {
     flex: 1,

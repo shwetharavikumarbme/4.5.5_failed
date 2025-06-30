@@ -28,6 +28,7 @@ import apiClient from '../ApiClient';
 import { EventRegister } from 'react-native-event-listeners';
 import AppStyles from '../../assets/AppStyles';
 import { actions, RichEditor, RichToolbar } from 'react-native-pell-rich-editor';
+import { cleanForumHtml } from './forumBody';
 
 async function uriToBlob(uri) {
   const response = await fetch(uri);
@@ -147,7 +148,7 @@ const ForumPostScreen = () => {
     }
   };
 
-  const [imageMeta, setImageMeta] = useState(null); // Add this to your component state
+  const [mediaMeta, setMediaMeta] = useState(null); // Add this to your component state
 
 
   const openGallery = async () => {
@@ -210,7 +211,7 @@ const ForumPostScreen = () => {
           name: asset.fileName ? asset.fileName.replace(/\.[^/.]+$/, '.jpeg') : 'image.jpeg',
         });
         setFileType('image/jpeg');
-        setImageMeta({
+        setMediaMeta({
           originalSize: originalFileSize,
           compressedSize: compressedFileSize,
           width: asset.width,
@@ -235,8 +236,8 @@ const ForumPostScreen = () => {
   const [capturedThumbnailUri, setCapturedThumbnailUri] = useState(null);
 
 
-  const handleVideoPick = () => {
-    selectVideo({
+  const handleVideoPick = async () => {
+    const videoMeta = await selectVideo({
       isCompressing,
       setIsCompressing,
       setThumbnailUri,
@@ -245,7 +246,12 @@ const ForumPostScreen = () => {
       setFileType,
       overlayRef,
     });
+  
+    if (videoMeta) {
+      setMediaMeta(videoMeta); // ✅ replace setImageMeta
+    }
   };
+  
 
 
 
@@ -398,33 +404,18 @@ const ForumPostScreen = () => {
     html?.replace(/<\/?[^>]+(>|$)/g, '').trim() || '';
 
 
-  const cleanForumHtml = (html) => {
-    if (!html) return '';
-
-    return html
-      // Remove background color and text color styles explicitly
-      .replace(/(<[^>]+) style="[^"]*(color|background-color):[^";]*;?[^"]*"/gi, '$1')
-      // Remove ALL inline styles
-      .replace(/(<[^>]+) style="[^"]*"/gi, '$1')
-      // Remove unwanted tags but keep content (like font, span, div, p)
-      .replace(/<\/?(font|span|div|p)[^>]*>/gi, '')
-      // Remove empty tags like <b></b>
-      .replace(/<[^\/>][^>]*>\s*<\/[^>]+>/gi, '')
-      // Only allow: b, i, ul, ol, li, a, br (whitelist)
-      .replace(/<(?!\/?(b|i|ul|ol|li|a|br)(\s|>|\/))/gi, '&lt;')
-      // Keep only href attribute in <a> tags
-      .replace(/<a [^>]*href="([^"]+)"[^>]*>/gi, '<a href="$1">');
-  };
-
   const handleBodyChange = (html) => {
-    // Remove leading spaces in HTML content
+    // Trim leading spaces
     const cleanedHtml = html.replace(/(<p>\s+|^ )/, (match) => {
       showToast("Leading spaces are not allowed", 'error');
       return match.trimStart();
     });
-
-    setPostData((prev) => ({ ...prev, body: cleanedHtml }));
+  
+    const sanitizedHtml = cleanForumHtml(cleanedHtml);
+  
+    setPostData((prev) => ({ ...prev, body: sanitizedHtml }));
   };
+  
 
 
   const handlePostSubmission = async () => {
@@ -456,7 +447,7 @@ const ForumPostScreen = () => {
         forum_body: sanitizedBody, // ✅ cleaned before submit
         fileKey,
         thumbnail_fileKey: thumbnailFileKey,
-        extraData: imageMeta || {}
+        extraData: mediaMeta || {}
 
       };
 

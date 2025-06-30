@@ -352,7 +352,7 @@ const ResourcesDetails = () => {
                                     resizeMode="contain"
                                 />
                             ) : videoExtensions.includes(fileExtension) ? (
-                                <View style={styles.videoContainer}>
+                                <View style={styles.videoContainer} >
                                     <VideoPlayer
                                         source={{ uri: mediaUrl }}
                                         style={[styles.video, { backgroundColor: "#fff" }]}

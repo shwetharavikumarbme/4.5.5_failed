@@ -1,4 +1,3 @@
-// components/MediaViewer.js
 import React, { useEffect, useState, useRef } from 'react';
 import {
     Modal,
@@ -10,9 +9,9 @@ import {
     FlatList,
     ActivityIndicator,
     SafeAreaView,
+    Image
 } from 'react-native';
 import Video from 'react-native-video';
-import { Image } from 'react-native';
 import ImageViewer from 'react-native-image-zoom-viewer';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
@@ -32,7 +31,7 @@ const MediaViewer = () => {
     const flatListRef = useRef(null);
     const [isMuted, setIsMuted] = useState(true);
     const [bufferingStates, setBufferingStates] = useState({});
-    const videoRefs = useRef({}); // key: index, value: ref
+    const videoRefs = useRef({});
     const [currentTimes, setCurrentTimes] = useState({});
     const [videoDurations, setVideoDurations] = useState({});
 
@@ -44,9 +43,11 @@ const MediaViewer = () => {
     };
 
     useEffect(() => {
-        openViewerFn = ({ mediaArray, startIndex }) => {
+        openViewerFn = ({ mediaArray = [], startIndex = 0 }) => {
+            if (!Array.isArray(mediaArray) || mediaArray.length === 0) return;
+
             setMediaArray(mediaArray);
-            setCurrentIndex(startIndex);
+            setCurrentIndex(Math.min(startIndex, mediaArray.length - 1));
             setVisible(true);
             setTimeout(() => {
                 flatListRef.current?.scrollToIndex({ index: startIndex, animated: false });
@@ -64,9 +65,17 @@ const MediaViewer = () => {
     };
 
     const renderItem = ({ item, index }) => {
+        if (!item || typeof item !== 'object' || !item.url || !item.type) {
+            return (
+                <View style={styles.centeredMediaWrapper}>
+                    <Text style={styles.noImageText}>Invalid Media</Text>
+                </View>
+            );
+        }
+
         const isCurrent = index === currentIndex;
         const isBuffering = bufferingStates[index];
-        const isFallback = fallbackAssets.some(name => item.url.includes(name));
+        const isFallback = fallbackAssets.some(name => (item?.url || '').includes(name));
 
         if (isFallback) {
             return (
@@ -79,15 +88,15 @@ const MediaViewer = () => {
         if (item.type === 'image') {
             return (
                 <View style={{ width, height }}>
-                <ImageViewer
-                    imageUrls={[{ url: item.url }]}
-                    backgroundColor="black"
-                    enableSwipeDown
-                    onSwipeDown={handleClose}
-                    saveToLocalByLongPress={false}
-                    renderIndicator={() => null}
-                />
-            </View>
+                    <ImageViewer
+                        imageUrls={[{ url: item.url }]}
+                        backgroundColor="black"
+                        enableSwipeDown
+                        onSwipeDown={handleClose}
+                        saveToLocalByLongPress={false}
+                        renderIndicator={() => null}
+                    />
+                </View>
             );
         }
 
@@ -123,9 +132,8 @@ const MediaViewer = () => {
         );
     };
 
-
     const renderThumbnail = ({ item, index }) => {
-        if (fallbackAssets.some(name => item.url.includes(name))) return null;
+        if (!item || !item.url || !item.type || fallbackAssets.some(name => item.url.includes(name))) return null;
 
         return (
             <TouchableOpacity
@@ -165,43 +173,44 @@ const MediaViewer = () => {
         <Modal visible={visible} transparent onRequestClose={handleClose}>
             <SafeAreaView style={styles.safeArea}>
                 <View style={styles.modalContainer}>
-                    {/* TOP CONTROLS */}
+                    {/* TOP BAR */}
                     <View style={styles.topBar}>
                         <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
                             <Text style={styles.closeText}>✕</Text>
                         </TouchableOpacity>
-
-                        {mediaArray[currentIndex]?.type === 'video' && (
+                        {mediaArray?.[currentIndex]?.type === 'video' && (
                             <TouchableOpacity onPress={() => setIsMuted(!isMuted)} style={styles.muteButton}>
                                 <Icon name={isMuted ? 'volume-off' : 'volume-up'} size={22} color="white" />
                             </TouchableOpacity>
                         )}
                     </View>
 
-                    {/* MAIN MEDIA */}
+                    {/* MAIN CONTENT */}
                     <FlatList
-                        ref={flatListRef}
-                        data={mediaArray}
-                        keyExtractor={(_, index) => index.toString()}
-                        renderItem={renderItem}
-                        horizontal
-                        pagingEnabled
-                        showsHorizontalScrollIndicator={false}
-                        getItemLayout={(_, index) => ({
-                            length: width,
-                            offset: width * index,
-                            index,
-                        })}
-                        onMomentumScrollEnd={e => {
-                            const index = Math.round(e.nativeEvent.contentOffset.x / width);
-                            setCurrentIndex(index);
-                        }}
-                        contentContainerStyle={{ flex: 1,alignItems:'center',justifyContent:'center',alignSelf:'center' }}
-                    />
+    ref={flatListRef}
+    data={mediaArray}
+    keyExtractor={(_, index) => index.toString()}
+    renderItem={renderItem}
+    horizontal
+    pagingEnabled
+    showsHorizontalScrollIndicator={false}
+    getItemLayout={(_, index) => ({
+        length: width,
+        offset: width * index,
+        index,
+    })}
+    onMomentumScrollEnd={e => {
+        const index = Math.round(e.nativeEvent.contentOffset.x / width);
+        setCurrentIndex(index);
+    }}
 
-                    {/* BOTTOM CONTROLS + THUMBNAILS */}
+/>
+
+
+
+                    {/* BOTTOM CONTROLS */}
                     <View style={styles.bottomBar}>
-                        {mediaArray[currentIndex]?.type === 'video' && (
+                        {mediaArray?.[currentIndex]?.type === 'video' && (
                             <>
                                 <View style={styles.progressBarWrapper}>
                                     <View
@@ -266,14 +275,13 @@ const MediaViewer = () => {
                         </View>
                     </View>
                 </View>
-
             </SafeAreaView>
         </Modal>
     );
-
 };
 
 export default MediaViewer;
+
 
 const styles = StyleSheet.create({
     progressBarWrapper: {
@@ -316,20 +324,35 @@ const styles = StyleSheet.create({
     modalContainer: {
         flex: 1,
         backgroundColor: 'black',
+        position: 'relative',
     },
+    
     topBar: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
         paddingTop: 20,
-    },
+        backgroundColor: 'rgba(0,0,0,0.4)',
 
+    },
+    
     bottomBar: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
         paddingBottom: 10,
         paddingTop: 10,
-        backgroundColor: 'black',
+        backgroundColor: 'transparent',
     },
+    
 
 
     mediaWrapper: {
@@ -397,12 +420,13 @@ const styles = StyleSheet.create({
         height,
     },
     centeredMediaWrapper: {
-        flex: 1,
+        width,
+        height,
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: 'black',
-        marginHorizontal:10
     },
+    
 
     topButtonsContainer: {
         flexDirection: 'row',
@@ -435,10 +459,9 @@ const styles = StyleSheet.create({
     thumbnailListWrapper: {
         alignItems: 'center',
         justifyContent: 'center',
-        borderTopWidth: 1,
-        borderTopColor: '#222',
         paddingTop: 8,
-        backgroundColor: 'black',
+        backgroundColor: 'transparent',
     },
+    
 
 });

@@ -22,7 +22,7 @@ const CompanyDetailsScreen = ({ route }) => {
   const { myId, myData } = useNetwork();
 
   const navigation = useNavigation();
-  const { userId } = route.params || {};
+  const { userId, profile: routeProfile } = route.params || {};
   const [profile, setProfile] = useState(null);
   const [imageUrl, setImageUrl] = useState(null);
   const [companyPdf, setCompanyPdf] = useState('');
@@ -219,15 +219,34 @@ const CompanyDetailsScreen = ({ route }) => {
   };
 
 
-
-
-  useFocusEffect(
-    React.useCallback(() => {
-      if (userId) {
-        fetchProfile();
+  useEffect(() => {
+    if (routeProfile) {
+      console.log('Setting profile from route.params:', routeProfile);
+      setProfile(routeProfile);
+  
+      if (routeProfile.fileKey?.trim()) {
+        (async () => {
+          try {
+            const res = await apiClient.post('/getObjectSignedUrl', {
+              command: 'getObjectSignedUrl',
+              key: routeProfile.fileKey,
+            });
+            setImageUrl(res.data);
+          } catch (error) {
+            setImageUrl(defaultImage);
+          }
+        })();
+      } else {
+        setImageUrl(defaultImage);
       }
-    }, [userId])
-  );
+  
+      fetchCompanypdf(routeProfile.brochureKey);
+    } else {
+      console.log('No profile from route, fetching from API');
+      fetchProfile();
+    }
+  }, []);
+  
 
 
 

@@ -34,7 +34,7 @@ import { getSignedUrl, getTimeDisplay } from "../helperComponents.jsx/signedUrls
 import { openMediaViewer } from "../helperComponents.jsx/mediaViewer";
 import ReactionSheet from "../helperComponents.jsx/ReactionUserSheet";
 import { fetchForumReactionsRaw } from "../helperComponents.jsx/ForumReactions";
-import { ForumBody } from "./forumBody";
+import { ForumBody, generateHighlightedHTML } from "./forumBody";
 
 const videoExtensions = [
   '.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.webm',
@@ -50,65 +50,11 @@ const Trending = ({ isPageFocused, scrollRef }) => {
 
   const { myId } = useNetwork();
   const { isConnected } = useConnection();
-
-  const [allPosts, setAllPosts] = useState();
-  const [suggestions, setSuggestions] = useState([]);
-  const [suggestionsLimit, setSuggestionsLimit] = useState(5);
   const [hasFetchedPosts, setHasFetchedPosts] = useState(false);
 
 
-  const fetchAllPosts = async () => {
-    try {
-      const requestData = { command: 'getAllTrendingPosts' };
-
-      const res = await apiClient.post('/getAllTrendingPosts', requestData);
-      const AllPosts = res?.data?.response || [];
-
-      setAllPosts(AllPosts);
-
-    } catch (error) {
-
-    } finally {
-      setLoading(false);
-
-    }
-  };
 
 
-  const getFuzzySuggestions = (inputText) => {
-    const fuse = new Fuse(allPosts, {
-      keys: ['forum_body'],
-      threshold: 0.5,
-      distance: 100,
-    });
-
-    const results = fuse.search(inputText);
-    const uniqueMap = new Map();
-
-    results.forEach(res => {
-      const { forum_body } = res.item;
-      const key = `${forum_body}`;
-
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, res.item);
-      }
-    });
-
-    return Array.from(uniqueMap.values());
-  };
-
-
-  const handleInputChange = (text) => {
-    setSearchQuery(text);
-    setSuggestionsLimit(5);
-
-    if (text.trim() === '') {
-      setSuggestions([]);
-      return;
-    }
-    const matchedSuggestions = getFuzzySuggestions(text);
-    setSuggestions(matchedSuggestions);
-  };
 
   const videoRefs = useRef({});
   const navigation = useNavigation();
@@ -352,7 +298,6 @@ const Trending = ({ isPageFocused, scrollRef }) => {
 
   useEffect(() => {
     if (isPageFocused && !hasFetchedPosts) {
-      fetchAllPosts();
       fetchTrendingPosts();
       setHasFetchedPosts(true);
     }
@@ -524,7 +469,22 @@ const Trending = ({ isPageFocused, scrollRef }) => {
 
     }
   };
-
+    const activeVideoRef = useRef(null);
+  
+  useEffect(() => {
+    activeVideoRef.current = activeVideo;
+  }, [activeVideo]);
+  
+ useEffect(() => {
+     if (!isFocused || !isPageFocused) {
+       setActiveVideo(null);
+     }
+   
+     return () => {
+       setActiveVideo(null);
+     };
+   }, [isFocused, isPageFocused]);
+  
 
   const { height: screenHeight } = Dimensions.get('window');
 
@@ -578,27 +538,31 @@ const Trending = ({ isPageFocused, scrollRef }) => {
               </View>
             </View>
           </View>
-
-          <ForumBody
-            html={item.forum_body}
-            forumId={item.forum_id}
-            isExpanded={expandedTexts[item.forum_id]}
-            toggleFullText={toggleFullText}
-
-          />
-
+          <View style={{ paddingHorizontal: 10, }}>
+            <ForumBody
+              html={generateHighlightedHTML(item.forum_body || '', searchQuery)}
+              forumId={item.forum_id}
+              isExpanded={expandedTexts[item.forum_id]}
+              toggleFullText={toggleFullText}
+            />
+          </View>
           {item.videoUrl ? (
             <TouchableOpacity activeOpacity={1} >
               <Video
-                ref={(ref) => {
-                  if (ref) {
-                    videoRefs.current[item.forum_id] = ref;
-                  }
-                }}
+              ref={(ref) => {
+                if (ref) {
+                  videoRefs.current[item.forum_id] = ref;
+                } else {
+                  // Clean up ref when unmounted
+                  delete videoRefs.current[item.forum_id];
+                }
+              }}
+            
                 source={{ uri: item.videoUrl }}
                 style={{
                   width: '100%',
                   aspectRatio: item.aspectRatio || 16 / 9,
+                  marginVertical: 5
                 }}
                 controls
                 paused={activeVideo !== item.forum_id}
@@ -619,6 +583,8 @@ const Trending = ({ isPageFocused, scrollRef }) => {
                   style={{
                     width: '100%',
                     aspectRatio: item.aspectRatio || 1,
+                    marginVertical: 5
+
                   }}
                 />
               </TouchableOpacity>
@@ -959,47 +925,69 @@ const Trending = ({ isPageFocused, scrollRef }) => {
   }, [fetchTrendingPosts, dispatch]);
 
 
+  const debounceTimeout = useRef(null);
 
-  const handleSearch = async (text) => {
-    if (!isConnected) {
-      showToast('No internet connection', 'error')
-      return;
-    }
+
+  const handleDebouncedTextChange = useCallback((text) => {
     setSearchQuery(text);
 
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+    }
 
     const trimmedText = text.trim();
 
     if (trimmedText === '') {
-
+      setSearchTriggered(false);
+      setSearchResults([]);
       return;
     }
-    setSearchTriggered(true);
-    setLoading(true);
-    setSuggestions([]);
+
+    debounceTimeout.current = setTimeout(() => {
+      handleSearch(trimmedText);
+    }, 300);
+  }, [handleSearch]);
+
+  const handleSearch = useCallback(async (text) => {
+    if (!isConnected) {
+      showToast('No internet connection', 'error');
+      return;
+    }
+
+    setSearchQuery(text);
+
+    const trimmedText = text.trim();
+
+    if (trimmedText === '') {
+      setSearchResults([]);
+      return;
+    }
+
     try {
       const requestData = {
         command: 'searchTrendingForumPosts',
         searchQuery: trimmedText,
       };
 
-      const res = await apiClient.post('/searchTrendingForumPosts', requestData);
+      const res = await withTimeout(apiClient.post('/searchTrendingForumPosts', requestData), 10000);
       const forumPosts = res.data.response || [];
       const count = res.data.count || forumPosts.length;
 
       const postsWithMedia = await Promise.all(
-        forumPosts.map((post) => fetchMediaForPost(post))
+        forumPosts.map(post => fetchMediaForPost(post))
       );
 
       setSearchResults(postsWithMedia);
       setSearchCount(count);
+
     } catch (error) {
 
     } finally {
-      setLoading(false);
-    }
+      setSearchTriggered(true);
 
-  };
+    }
+  }, [isConnected]);
+
   const onRender = (id, phase, actualDuration) => {
 
   };
@@ -1007,158 +995,100 @@ const Trending = ({ isPageFocused, scrollRef }) => {
   return (
     <Profiler id="ForumListCompanylatest" onRender={onRender}>
       <SafeAreaView style={{ flex: 1, backgroundColor: 'whitesmoke', }}>
-        <View style={{ flex: 1, backgroundColor: 'whitesmoke', }}>
+        <View style={AppStyles.headerContainer}>
+          <View style={AppStyles.searchContainer}>
+            <View style={AppStyles.inputContainer}>
+              <TextInput
+                style={[AppStyles.searchInput]}
+                placeholder="Search"
+                ref={searchInputRef}
+                placeholderTextColor="gray"
+                value={searchQuery}
+                onChangeText={handleDebouncedTextChange}
+              />
 
-          {suggestions.length > 0 && (
-            <ScrollView
-              style={styles.suggestionContainer}
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ backgroundColor: '#fff' }}
-            >
-              {suggestions.slice(0, suggestionsLimit).map((item, index) => (
+              {searchTriggered ? (
                 <TouchableOpacity
-                  key={index}
                   onPress={() => {
-                    const slicedQuery = item?.forum_body.length > 100
-                      ? `${item?.forum_body.slice(0, 30)}`
-                      : item?.forum_body;
-
-                    setSearchQuery(slicedQuery);
-                    handleSearch(slicedQuery);
-                    setSuggestions([]);
-                    setSuggestionsLimit(5);
-                    searchInputRef.current?.blur();
+                    setSearchQuery('');
+                    setSearchTriggered(false);
+                    setSearchResults([]);
+                    setSearchCount(0);
                   }}
-                  style={styles.suggestionItem}
+                  style={AppStyles.iconButton}
                 >
-                  <Text style={styles.suggestionTitle}>
-
-                    {item?.forum_body.length > 100
-                      ? `${item?.forum_body.slice(0, 40)}...`
-                      : item?.forum_body}
-                  </Text>
+                  <Icon name="close-circle" size={20} color="gray" />
                 </TouchableOpacity>
-              ))}
-
-              {suggestions.length > suggestionsLimit && (
+              ) : (
                 <TouchableOpacity
-                  onPress={() => setSuggestionsLimit(suggestionsLimit + 5)}
-                  style={styles.loadMoreButton}
+                  // onPress={() => handleSearch(searchQuery)}
+                  style={AppStyles.searchIconButton}
                 >
-                  <Text style={styles.loadMoreText}>Load More</Text>
+                  <Icon name="magnify" size={20} color="#075cab" />
                 </TouchableOpacity>
               )}
-            </ScrollView>
+
+            </View>
+
+          </View>
+
+        </View>
+
+        <View style={{ flex: 1, backgroundColor: 'whitesmoke', }}>
+
+
+          {!loading ? (
+            <FlatList
+              data={!searchTriggered || searchQuery.trim() === '' ? posts : searchResults}
+              renderItem={renderItem}
+              ref={listRef}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              onScrollBeginDrag={() => {
+                Keyboard.dismiss();
+                searchInputRef.current?.blur?.();
+
+              }}
+              keyExtractor={(item, index) => `${item.forum_id}-${index}`}
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
+              refreshControl={
+                <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+              }
+              onEndReached={handleEndReached}
+              onEndReachedThreshold={0.5}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: '10%' }}
+
+              ListHeaderComponent={
+                <>
+                  {searchTriggered && searchResults.length > 0 && (
+                    <Text style={styles.companyCount}>
+                      {searchResults.length} results found
+                    </Text>
+                  )}
+                </>
+              }
+              ListEmptyComponent={
+                (searchTriggered && searchResults.length === 0) ? (
+                  <View style={{ alignItems: 'center', marginTop: 40 }}>
+                    <Text style={{ fontSize: 16, color: '#666' }}>No posts found</Text>
+                  </View>
+                ) : null
+              }
+              ListFooterComponent={
+                loadingMore ? (
+                  <View style={{ paddingVertical: 20 }}>
+                    <ActivityIndicator size="small" color="#075cab" />
+                  </View>
+                ) : null
+              }
+
+            />
+          ) : (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator color={'#075cab'} size="large" />
+            </View>
           )}
-
-          <TouchableWithoutFeedback
-            onPress={() => {
-              Keyboard.dismiss();
-              searchInputRef.current?.blur?.();
-              setSuggestions([]);
-            }}
-          >
-            {!loading ? (
-              <FlatList
-                data={!searchTriggered || searchQuery.trim() === '' ? posts : searchResults}
-                renderItem={renderItem}
-                ref={listRef}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                onScrollBeginDrag={() => {
-                  Keyboard.dismiss();
-                  searchInputRef.current?.blur?.();
-                  setSuggestions([]);
-                }}
-                keyExtractor={(item, index) => `${item.forum_id}-${index}`}
-                onViewableItemsChanged={onViewableItemsChanged}
-                viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
-                refreshControl={
-                  <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
-                }
-                onEndReached={handleEndReached}
-                onEndReachedThreshold={0.5}
-                contentContainerStyle={{ flexGrow: 1, paddingBottom: '10%' }}
-
-                ListHeaderComponent={
-                  <>
-                    <View style={AppStyles.headerContainer}>
-                      <View style={AppStyles.searchContainer}>
-                        <View style={AppStyles.inputContainer}>
-                          <TextInput
-                            style={[AppStyles.searchInput]}
-                            placeholder="Search"
-                            ref={searchInputRef}
-                            placeholderTextColor="gray"
-                            value={searchQuery}
-                            onChangeText={handleInputChange}
-                            onSubmitEditing={() => {
-                              if (searchQuery.trim() !== '') {
-                                handleSearch(searchQuery);
-                                setSearchTriggered(true);
-                                setSuggestions([]);
-                                searchInputRef.current?.blur();
-                              }
-                            }}
-                            returnKeyType="search"
-                          />
-
-                          {searchTriggered ? (
-                            <TouchableOpacity
-                              onPress={() => {
-                                setSearchQuery('');
-                                setSearchTriggered(false);
-                                setSearchResults([]);
-                                setSearchCount(0);
-                              }}
-                              style={AppStyles.iconButton}
-                            >
-                              <Icon name="close-circle" size={20} color="gray" />
-                            </TouchableOpacity>
-                          ) : (
-                            <TouchableOpacity
-                              // onPress={() => handleSearch(searchQuery)}
-                              style={AppStyles.searchIconButton}
-                            >
-                              <Icon name="magnify" size={20} color="#075cab" />
-                            </TouchableOpacity>
-                          )}
-
-                        </View>
-
-                      </View>
-
-
-                    </View>
-                    {searchTriggered && searchResults.length > 0 && (
-                      <Text style={styles.companyCount}>
-                        {searchResults.length} results found
-                      </Text>
-                    )}
-                  </>
-                }
-                ListEmptyComponent={
-                  (searchTriggered && searchResults.length === 0) ? (
-                    <View style={{ alignItems: 'center', marginTop: 40 }}>
-                      <Text style={{ fontSize: 16, color: '#666' }}>No posts found</Text>
-                    </View>
-                  ) : null
-                }
-                ListFooterComponent={
-                  loadingMore ? (
-                    <View style={{ paddingVertical: 20 }}>
-                      <ActivityIndicator size="small" color="#075cab" />
-                    </View>
-                  ) : null
-                }
-
-              />
-            ) : (
-              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator color={'#075cab'} size="large" />
-              </View>
-            )}
-          </TouchableWithoutFeedback>
 
         </View>
         <ReactionSheet ref={reactionSheetRef} />
@@ -1175,40 +1105,6 @@ const styles = StyleSheet.create({
     color: 'black',
     paddingHorizontal: 15,
     paddingVertical: 5,
-  },
-  suggestionContainer: {
-    position: 'absolute',
-    top: 50, // adjust depending on your header/search bar height
-    width: '95%',
-    alignSelf: 'center',
-    maxHeight: '45%',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingVertical: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 999, // ensures it's above FlatList
-  },
-  suggestionItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  suggestionTitle: {
-    fontSize: 14,
-    color: 'black'
-  },
-  loadMoreButton: {
-    paddingVertical: 10,
-    alignItems: 'center',
-
-  },
-  loadMoreText: {
-    fontWeight: '600',
-    color: '#075cab',
   },
 
   container: {

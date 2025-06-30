@@ -7,7 +7,15 @@ import { getSignedUrl } from './signedUrls';
 import defaultImage from '../../images/homepage/image.jpg'
 import buliding from '../../images/homepage/buliding.jpg';
 import { Image } from 'react-native';
+import { EventRegister } from 'react-native-event-listeners';
+import maleImage from '../../images/homepage/dummy.png';
+import femaleImage from '../../images/homepage/female.jpg';
+import companyImage from '../../images/homepage/buliding.jpg';
 
+
+const defaultImageUriCompany = Image.resolveAssetSource(companyImage).uri;
+const defaultImageUriFemale = Image.resolveAssetSource(femaleImage).uri;
+const defaultImageUriMale = Image.resolveAssetSource(maleImage).uri;
 const Company = Image.resolveAssetSource(buliding).uri;
 const defaultLogo = Image.resolveAssetSource(defaultImage).uri;
 
@@ -34,7 +42,37 @@ const useFetchData = ({ shouldFetch = false }) => {
   const [trendingImageUrls, setTrendingImageUrls] = useState({});
   const [productImageUrls, setProductImageUrls] = useState({});
   const [servicesImageUrls, setServicesImageUrls] = useState({});
+  const [authorImageUrls, setAuthorImageUrls] = useState({});
 
+  useEffect(() => {
+    const jobDeleteListener = EventRegister.addEventListener('onJobDeleted', (data) => {
+      console.log('Job deleted:', data);
+      if (data?.postId) {
+        setJobs(prev => prev.filter(job => job.post_id !== data.postId));
+      }
+    });
+
+    const forumDeleteListener = EventRegister.addEventListener('onForumPostDeleted', (data) => {
+      console.log('Forum post deleted:', data);
+      if (data?.forum_id) {
+        setLatestPosts(prev => prev.filter(post => post.forum_id !== data.forum_id));
+      }
+    });
+
+    const productDeleteListener = EventRegister.addEventListener('onProductDeleted', (data) => {
+      console.log('Product deleted:', data);
+      if (data?.deletedProductId) {
+        setProducts(prev => prev.filter(product => product.product_id !== data.deletedProductId));
+      }      
+    });
+
+    // Cleanup on unmount
+    return () => {
+      EventRegister.removeEventListener(jobDeleteListener);
+      EventRegister.removeEventListener(forumDeleteListener);
+      EventRegister.removeEventListener(productDeleteListener);
+    };
+  }, []);
 
   const fetchJobs = async () => {
     if (!isConnected) return;
@@ -86,21 +124,42 @@ const useFetchData = ({ shouldFetch = false }) => {
       if (response.data.status === "success") {
         const trendingData = response.data.response || [];
 
-        const urlPromises = trendingData.map(post =>
+        const fileKeyUrlPromises = trendingData.map(post =>
           getSignedUrl(post.forum_id, post.fileKey)
         );
-        const signedUrlsArray = await Promise.all(urlPromises);
-
-        const rawSignedUrlMap = Object.assign({}, ...signedUrlsArray);
-
-        // ✅ Add fallback image if URL is empty or null
-        const signedUrlMap = Object.entries(rawSignedUrlMap).reduce((acc, [id, url]) => {
+  
+        // Author image signed URLs (skip if key is missing)
+        const authorKeyUrlPromises = trendingData.map(post =>
+          getSignedUrl(post.forum_id, post.author_fileKey)
+        );
+        const [fileKeyUrlsArray, authorKeyUrlsArray] = await Promise.all([
+          Promise.all(fileKeyUrlPromises),
+          Promise.all(authorKeyUrlPromises),
+        ]);
+        const fileKeyUrlMap = Object.assign({}, ...fileKeyUrlsArray);
+        const authorKeyUrlMap = Object.assign({}, ...authorKeyUrlsArray);
+  
+        const signedUrlMap = Object.entries(fileKeyUrlMap).reduce((acc, [id, url]) => {
           acc[id] = url || defaultLogo;
           return acc;
         }, {});
-
+  
+        // ✅ Gender-based fallback logic for author images
+        const authorImageUrlMap = trendingData.reduce((acc, post) => {
+          const signedUrl = authorKeyUrlMap[post.forum_id];
+          if (signedUrl) {
+            acc[post.forum_id] = signedUrl;
+          } else if (post.author_gender?.toLowerCase() === 'female') {
+            acc[post.forum_id] = defaultImageUriFemale;
+          } else {
+            acc[post.forum_id] = defaultImageUriMale;
+          }
+          return acc;
+        }, {});
         setTrendingPosts(trendingData);
         setTrendingImageUrls(signedUrlMap);
+        setAuthorImageUrls(authorImageUrlMap); 
+
       } else {
 
       }
@@ -115,42 +174,63 @@ const useFetchData = ({ shouldFetch = false }) => {
   const fetchLatestPosts = async () => {
     if (!isConnected) return;
     setIsFetchingLatestPosts(true);
-
+  
     try {
       const response = await apiClient.post('/getLatestPosts', {
         command: "getLatestPosts",
         limit: 10,
-
       });
-
+  
       if (response.data.status === "success") {
         const latestData = response.data.response || [];
-
-        const urlPromises = latestData.map(post =>
+  
+        // Media image signed URLs
+        const fileKeyUrlPromises = latestData.map(post =>
           getSignedUrl(post.forum_id, post.fileKey)
         );
-        const signedUrlsArray = await Promise.all(urlPromises);
-
-        const rawSignedUrlMap = Object.assign({}, ...signedUrlsArray);
-
-        // ✅ Add fallback image if URL is empty or null
-        const signedUrlMap = Object.entries(rawSignedUrlMap).reduce((acc, [id, url]) => {
+  
+        // Author image signed URLs (skip if key is missing)
+        const authorKeyUrlPromises = latestData.map(post =>
+          getSignedUrl(post.forum_id, post.author_fileKey)
+        );
+        const [fileKeyUrlsArray, authorKeyUrlsArray] = await Promise.all([
+          Promise.all(fileKeyUrlPromises),
+          Promise.all(authorKeyUrlPromises),
+        ]);
+  
+        const fileKeyUrlMap = Object.assign({}, ...fileKeyUrlsArray);
+        const authorKeyUrlMap = Object.assign({}, ...authorKeyUrlsArray);
+  
+        const signedUrlMap = Object.entries(fileKeyUrlMap).reduce((acc, [id, url]) => {
           acc[id] = url || defaultLogo;
           return acc;
         }, {});
-
+  
+        // ✅ Gender-based fallback logic for author images
+        const authorImageUrlMap = latestData.reduce((acc, post) => {
+          const signedUrl = authorKeyUrlMap[post.forum_id];
+          if (signedUrl) {
+            acc[post.forum_id] = signedUrl;
+          } else if (post.author_gender?.toLowerCase() === 'female') {
+            acc[post.forum_id] = defaultImageUriFemale;
+          } else {
+            acc[post.forum_id] = defaultImageUriMale;
+          }
+          return acc;
+        }, {});
+  
         setLatestPosts(latestData);
         setLatestImageUrls(signedUrlMap);
-
-      } else {
-
+        setAuthorImageUrls(authorImageUrlMap); 
+  
       }
     } catch (error) {
-
+      // handle error if needed
     } finally {
       setIsFetchingLatestPosts(false);
     }
   };
+  
 
   const fetchProducts = async () => {
     if (!isConnected) return;
@@ -290,6 +370,7 @@ const useFetchData = ({ shouldFetch = false }) => {
     trendingImageUrls,
     productImageUrls,
     servicesImageUrls,
+    authorImageUrls,
     refreshData
   };
 

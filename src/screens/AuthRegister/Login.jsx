@@ -216,7 +216,8 @@ const LoginPhoneScreen = () => {
                 placeholderTextColor="gray"
                 value={phone}
                 textContentType="oneTimeCode"
-                autoComplete="sms-otp"
+                autoFocus
+
               />
 
 

@@ -18,6 +18,7 @@ import default_image from '../../images/homepage/buliding.jpg'
 import { showToast } from '../AppUtils/CustomToast';
 import { useNetwork } from '../AppUtils/IdProvider';
 import AppStyles from '../../assets/AppStyles';
+import { EventRegister } from 'react-native-event-listeners';
 
 const defaultImage = Image.resolveAssetSource(default_image).uri;
 
@@ -106,17 +107,17 @@ const CompanyJobPostScreen = () => {
 
   const handleIndustrySelect = (selectedItem) => {
     const { label } = selectedItem;
-  
+
     // Reset required_expertise and selectedSkills
     handleChange('industry_type', label);
     handleChange('required_expertise', '');
     setSelectedSkills([]); // Clear previously selected skills
-  
+
     // Update skill options for the new industry
     setExpertiseOptions(industrySkills[label] || []);
     setExpertiseKey(Date.now()); // Re-render dropdown if needed
   };
-  
+
 
   const handleSkillSelect = (selected) => {
     if (!selectedSkills.find(s => s === selected.label)) {
@@ -234,22 +235,10 @@ const CompanyJobPostScreen = () => {
       .then(async (res) => {
         if (res.data.status === 'success') {
           const newPost = res.data.post_details;
-          const postWithMedia = await fetchMediaForJob(newPost);
 
-          const jobDataToDispatch = {
-            ...postWithMedia,
-            fileKey: newPost.fileKey,
-            company_id: myId,
-          };
-
-          dispatch(addJobPost(jobDataToDispatch));
-
-          // Dispatch image URL separately to jobImageUrls reducer
-          dispatch({
-            type: 'SET_JOB_IMAGE_URLS',
-            payload: {
-              [newPost.post_id]: postWithMedia.imageUrl,
-            },
+          EventRegister.emit('onJobPostCreated', {
+            newPost: newPost,
+            companyId: myId,
           });
 
           showToast('Job posted successfully', 'success');
@@ -265,29 +254,6 @@ const CompanyJobPostScreen = () => {
       .catch(error => {
         showToast('Something went wrong', 'error');
       });
-  };
-
-
-  const fetchMediaForJob = async (job) => {
-
-    let imageUrl = defaultImage;
-
-    if (job.fileKey) {
-      try {
-        const res = await apiClient.post('/getObjectSignedUrl', {
-          command: "getObjectSignedUrl",
-          key: job.fileKey,
-        });
-
-        if (res.data) {
-          imageUrl = res.data;
-        }
-      } catch (error) {
-
-      }
-    }
-
-    return { ...job, imageUrl };
   };
 
 

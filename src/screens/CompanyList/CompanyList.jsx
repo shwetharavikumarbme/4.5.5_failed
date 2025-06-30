@@ -13,7 +13,8 @@ import apiClient from '../ApiClient';
 import Fuse from 'fuse.js';
 import { useNetwork } from '../AppUtils/IdProvider';
 import { useConnection } from '../AppUtils/ConnectionProvider';
-import { getSignedUrl } from '../helperComponents.jsx/signedUrls';
+import { getSignedUrl, highlightMatch, useLazySignedUrls } from '../helperComponents.jsx/signedUrls';
+import AppStyles from '../../assets/AppStyles';
 
 const defaultImage = Image.resolveAssetSource(default_image).uri;
 const CompanyListScreen = () => {
@@ -22,15 +23,12 @@ const CompanyListScreen = () => {
   const { isConnected } = useConnection();
 
   const [companies, setCompanies] = useState([]);
-  const [filteredCompanies, setFilteredCompanies] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [companyImageUrls, setCompanyImageUrls] = useState({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const scrollViewRef = useRef(null);
-  const [suggestions, setSuggestions] = useState([]);
-  const [visibleSuggestionCount, setVisibleSuggestionCount] = useState(5);
   const [searchTriggered, setSearchTriggered] = useState(false);
-  const [allCompanies, setallCompanies] = useState([]);
+
   useScrollToTop(scrollViewRef);
 
   const [loadingMore, setLoadingMore] = useState(false);
@@ -39,52 +37,9 @@ const CompanyListScreen = () => {
   const [loading, setLoading] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [companyCount, setCompanyCount] = useState(0);
+  const [searchCount, setSearchCount] = useState(0);
+  const [fetchLimit, setFetchLimit] = useState(20);
 
-  const fetchAllCompanies = async () => {
-    const requestData = { command: 'listAllCompanies' };
-    try {
-      const response = await apiClient.post('/listAllCompanies', requestData);
-
-      setallCompanies(response.data.response);
-
-    } catch (error) {
-
-    }
-  };
-
-
-  useEffect(() => {
-    fetchAllCompanies();
-  }, [])
-
-  const handleInputChange = (text) => {
-    setSearchQuery(text);
-    if (text.trim() === '') {
-      setSearchTriggered(false);
-      setSuggestions([]);
-      return;
-    }
-    const matchedSuggestions = getFuzzySuggestions(text);
-    setSuggestions(matchedSuggestions);
-
-  };
-
-  const getFuzzySuggestions = (inputText) => {
-    const fuse = new Fuse(allCompanies, {
-      keys: ['company_name'],
-      threshold: 0.5,
-      distance: 100,
-    });
-    const results = fuse.search(inputText);
-    const uniqueMap = new Map();
-    results.forEach(res => {
-      const { company_name } = res.item;
-      if (!uniqueMap.has(company_name)) {
-        uniqueMap.set(company_name, res.item);
-      }
-    });
-    return Array.from(uniqueMap.values());
-  };
 
   const withTimeout = (promise, timeout = 10000) => {
     return Promise.race([
@@ -94,16 +49,14 @@ const CompanyListScreen = () => {
   };
 
   const fetchCompanies = async (lastEvaluatedKey = null) => {
-    if (!isConnected) {
+    if (!isConnected || loading || loadingMore) return;
 
-      return;
-    }
     lastEvaluatedKey ? setLoadingMore(true) : setLoading(true);
 
     try {
       const requestData = {
         command: "listAllCompanies",
-        limit: 10,
+        limit: fetchLimit,
         ...(lastEvaluatedKey && { lastEvaluatedKey }),
       };
 
@@ -111,42 +64,40 @@ const CompanyListScreen = () => {
 
       const companies = res.data.response || [];
       setCompanyCount(res.data.count);
-
-      const sortedCompanies = companies.sort((a, b) => b.company_created_on - a.company_created_on);
-      setCompanies((prev) => [...prev, ...sortedCompanies]);
-      setFilteredCompanies((prevFiltered) => [...prevFiltered, ...sortedCompanies]);
-
-      if (res.data.lastEvaluatedKey) {
-        setLastEvaluatedKey(res.data.lastEvaluatedKey);
-        setHasMoreCompanies(true);
-      } else {
+      if (!companies.length) {
+        setLastEvaluatedKey(null);
         setHasMoreCompanies(false);
+        return;
       }
-      const urlPromises = companies.map(company =>
-        getSignedUrl(company.company_id, company.fileKey)
-      );
-      const signedUrlsArray = await Promise.all(urlPromises);
-      const rawSignedUrlMap = Object.assign({}, ...signedUrlsArray);
 
-      const signedUrlMap = Object.entries(rawSignedUrlMap).reduce((acc, [id, url]) => {
-        acc[id] = url || defaultImage;
-        return acc;
-      }, {});
-  
-      setCompanyImageUrls((prevUrls) => ({ ...prevUrls, ...signedUrlMap }));
-  
-  
+      setCompanies(prev => {
+        const existingIds = new Set(prev.map(c => c.company_id));
+        const newUniqueCompanies = companies.filter(c => !existingIds.has(c.company_id));
+        return [...prev, ...newUniqueCompanies];
+      });
+
+      setLastEvaluatedKey(res.data.lastEvaluatedKey || null);
+      setHasMoreCompanies(!!res.data.lastEvaluatedKey);
+
     } catch (error) {
-
+      console.error('❌ Error in fetchCompanies:', error);
     } finally {
       setLoading(false);
       setLoadingMore(false);
-      setIsRefreshing(false);
     }
   };
 
 
 
+
+  const {
+    getUrlFor,
+    onViewableItemsChanged,
+    viewabilityConfig
+  } = useLazySignedUrls(companies, getSignedUrl, 5, {
+    idField: 'company_id',
+    fileKeyField: 'fileKey',
+  });
 
 
 
@@ -170,7 +121,7 @@ const CompanyListScreen = () => {
     }
 
     setCompanies([]);
-    setFilteredCompanies([]);
+
     setCompanyImageUrls({});
     setHasMoreCompanies(true);
     setLastEvaluatedKey(null);
@@ -180,7 +131,29 @@ const CompanyListScreen = () => {
   }, []);
 
 
-  const [searchCount, setSearchCount] = useState(0);
+  const debounceTimeout = useRef(null);
+
+  const handleDebouncedTextChange = useCallback((text) => {
+    setSearchQuery(text);
+
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+    }
+
+    const trimmedText = text.trim();
+
+    if (trimmedText === '') {
+      setSearchTriggered(false);
+      setSearchResults([]);
+      return;
+    }
+
+    debounceTimeout.current = setTimeout(() => {
+      handleSearch(trimmedText);  // Call actual search function
+    }, 300);
+  }, [handleSearch]);
+
+
 
   const handleSearch = async (text) => {
     setSearchQuery(text);
@@ -191,42 +164,39 @@ const CompanyListScreen = () => {
       return;
     }
 
-    setLoading(true);
-
     try {
       const requestData = {
-        command: "searchCompanies",
-        searchQuery: text,
+        command: 'searchCompanies',
+        searchQuery: text.trim(),
       };
+
       const res = await withTimeout(apiClient.post('/searchCompanies', requestData), 10000);
-      const companies = res.data.response || [];
+      const companies = res?.data?.response || [];
+      const count = res?.data?.count || companies.length;
 
-      const count = res.data.count || companies.length;
-
-
+      // Fetch signed URLs
       const urlPromises = companies.map(company =>
         getSignedUrl(company.company_id, company.fileKey)
       );
       const signedUrlsArray = await Promise.all(urlPromises);
       const signedUrlMap = Object.assign({}, ...signedUrlsArray);
 
+      const companiesWithImage = companies.map(company => ({
+        ...company,
+        imageUrl: signedUrlMap[company.company_id] || defaultImage,
+      }));
 
-      setCompanyImageUrls((prevUrls) => {
-        const mergedUrls = { ...prevUrls, ...signedUrlMap };
-        // Now update results
-        setSearchResults(companies);
-        setSearchCount(count);
-        return mergedUrls;
-      });
+      setSearchResults(companiesWithImage);
+      setSearchCount(count);
+
     } catch (error) {
-      console.error('Error searching companies:', error);
+      console.error('[handleSearch] Error searching companies:', error);
+      showToast('Something went wrong. Please try again.', 'error');
     } finally {
-      setLoading(false);
+      setSearchTriggered(true);
+
     }
   };
-
-
-
 
 
 
@@ -259,21 +229,15 @@ const CompanyListScreen = () => {
   };
 
 
-  const getSlicedTitle = (title) => {
-    const maxLength = 28;
-    if (title.length > maxLength) {
-      return title.slice(0, maxLength).trim() + '...';
-    }
-    return title;
-  };
-
   const navigateToDetails = (company) => {
-    navigation.navigate('CompanyDetails', { userId: company.company_id });
+    navigation.navigate('CompanyDetails', { userId: company.company_id, profile : company});
   };
 
 
   const renderCompanyItem = ({ item, index }) => {
-    const imageUrl = companyImageUrls[item.company_id];
+    if (!item) return
+
+    const imageUrl = getUrlFor(item.company_id);
     const resizeMode = imageUrl?.includes('buliding.jpg') ? 'cover' : 'contain';
 
     return (
@@ -308,7 +272,8 @@ const CompanyListScreen = () => {
               <Text style={styles.colon}>:</Text>
 
               <Text style={styles.value}>
-                {(typeof item.company_name === 'object' ? item.company_name.value : item.company_name || "")}
+                <Text numberOfLines={1} style={styles.companyName}>{highlightMatch(item?.company_name || '', searchQuery)}</Text>
+
               </Text>
             </View>
             <View style={styles.row}>
@@ -318,8 +283,8 @@ const CompanyListScreen = () => {
               </View>
               <Text style={styles.colon}>:</Text>
 
-              <Text style={styles.value}>
-                {getSlicedTitle(typeof item.category === 'object' ? item.category.value : item.category || "")}
+              <Text numberOfLines={1} style={styles.value}>
+                {highlightMatch(item?.category || '', searchQuery)}
               </Text>
             </View>
             <View style={styles.row}>
@@ -330,7 +295,7 @@ const CompanyListScreen = () => {
               <Text style={styles.colon}>:</Text>
 
               <Text style={styles.value}>
-                {item.company_located_city || ""}
+                {highlightMatch(item?.company_located_city || '', searchQuery)}
               </Text>
             </View>
             <View style={styles.row}>
@@ -341,7 +306,7 @@ const CompanyListScreen = () => {
               <Text style={styles.colon}>:</Text>
 
               <Text style={styles.value}>
-                {item.company_located_state || ""}
+                {highlightMatch(item?.company_located_state || '', searchQuery)}
               </Text>
             </View>
             <View style={styles.buttonContainer}>
@@ -360,7 +325,6 @@ const CompanyListScreen = () => {
     );
   };
 
-
   return (
     <SafeAreaView style={styles.container1}>
       <View style={styles.container} >
@@ -377,16 +341,8 @@ const CompanyListScreen = () => {
                 ref={searchInputRef}
                 placeholderTextColor="gray"
                 value={searchQuery}
-                onChangeText={handleInputChange}
-                onSubmitEditing={() => {
-                  if (searchQuery.trim() !== '') {
-                    handleSearch(searchQuery);
-                    setSearchTriggered(true);
-                    setSuggestions([]);
+                onChangeText={handleDebouncedTextChange}
 
-                    searchInputRef.current?.blur();
-                  }
-                }}
               />
               {searchTriggered ? (
                 <TouchableOpacity
@@ -395,25 +351,15 @@ const CompanyListScreen = () => {
                     setSearchTriggered(false);
                     setSearchResults([]);
                     setSearchCount(0);
-                    setSuggestions([]);
 
                   }}
-                  style={styles.iconButton}
+                  style={AppStyles.iconButton}
                 >
                   <Icon name="close-circle" size={20} color="gray" />
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  // onPress={() => {
-                  //   if (searchQuery.trim() !== '') {
-                  //     handleSearch(searchQuery);
-                  //     setSearchTriggered(true);
-                  //     setSuggestions([]);
-                  //     searchInputRef.current?.blur();
-
-                  //   }
-                  // }}
-                  style={styles.searchIconButton}
+                  style={AppStyles.searchIconButton}
                 >
                   <Icon name="magnify" size={20} color="#075cab" />
                 </TouchableOpacity>
@@ -422,51 +368,17 @@ const CompanyListScreen = () => {
             </View>
           </View>
         </View>
-        {(searchQuery.trim() !== '') && suggestions.length > 0 && (
-          <ScrollView
-            style={styles.suggestionContainer}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ backgroundColor: '#fff' }}
-          >
-            {suggestions.slice(0, visibleSuggestionCount).map((item, index) => (
-              <TouchableOpacity
-                key={index}
-                onPress={() => {
-                  setSearchQuery(item.company_name);
-                  handleSearch(item.company_name);
-                  setSuggestions([]);
-                  setSearchTriggered(true);
-                  searchInputRef.current?.blur();
-
-                }}
-                style={styles.suggestionItem}
-              >
-                <Text style={styles.suggestionText}>
-                  {item.company_name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            {visibleSuggestionCount < suggestions.length && (
-              <TouchableOpacity
-                onPress={() => setVisibleSuggestionCount(prev => Math.min(prev + 5, suggestions.length))} // Ensure it doesn't exceed total suggestions
-                style={styles.loadMoreButton}
-              >
-                <Text style={styles.loadMoreText}>Load more...</Text>
-              </TouchableOpacity>
-            )}
-          </ScrollView>
-        )}
 
         <TouchableWithoutFeedback
           onPress={() => {
             Keyboard.dismiss();
             searchInputRef.current?.blur?.();
-            setSuggestions([]);
+
           }}
         >
           {!loading ? (
             <FlatList
-              data={!searchTriggered || searchQuery.trim() === '' ? filteredCompanies : searchResults}
+              data={!searchTriggered || searchQuery.trim() === '' ? companies : searchResults}
               renderItem={renderCompanyItem}
               ref={scrollViewRef}
               keyExtractor={(item, index) => `${item.company_id}-${index}`}
@@ -475,14 +387,15 @@ const CompanyListScreen = () => {
                   fetchCompanies(lastEvaluatedKey);
                 }
               }}
-              contentContainerStyle={{paddingBottom:'20%'}}
+              contentContainerStyle={{ paddingBottom: '20%' }}
               onEndReachedThreshold={0.5}
               showsVerticalScrollIndicator={false}
-
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
               onScrollBeginDrag={() => {
                 Keyboard.dismiss();
                 searchInputRef.current?.blur?.();
-                setSuggestions([]);
+
               }}
               ListFooterComponent={() =>
                 loadingMore && (
@@ -492,11 +405,22 @@ const CompanyListScreen = () => {
                 )
               }
               ListHeaderComponent={
-                <View >
+                <View>
                   {!loading && (
-                    <Text style={styles.companyCount}>
-                      {searchTriggered ? `${searchCount} Companies found` : `${companyCount} Companies found`}
-                    </Text>
+                    <>
+                      <Text style={styles.companyCount}>
+                        {searchTriggered ? `${searchResults.length} companies found` : `${companyCount} companies found`}
+                      </Text>
+
+                      {searchTriggered && searchResults.length > 0 && (
+                        <Text style={styles.companyCount}>
+                          Showing results for{" "}
+                          <Text style={{ fontSize: 18, fontWeight: '600', color: '#075cab' }}>
+                            "{searchQuery}"
+                          </Text>
+                        </Text>
+                      )}
+                    </>
                   )}
                 </View>
               }
@@ -535,72 +459,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'whitesmoke',
 
   },
-  searchIconButton: {
-    padding: 8,
-    overflow: 'hidden',
-    backgroundColor: '#e6f0ff',
-    borderTopRightRadius: 10,
-    borderBottomRightRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 2,
-  },
-  iconButton: {
-    padding: 8,
-    overflow: 'hidden',
-    backgroundColor: '#e6f0ff',
-    borderTopRightRadius: 10,
-    borderBottomRightRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 2,
-
-  },
-  suggestionContainer: {
-    position: 'absolute',
-    top: 50, // adjust depending on your header/search bar height
-    width: '95%',
-    alignSelf: 'center',
-    maxHeight: '45%',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingVertical: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 999, // ensures it's above FlatList
-  },
-  suggestionItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderColor: '#eee',
-  },
-
-  suggestionText: {
-    fontSize: 15,
-    color: '#333',
-  },
-
-  loadMoreButton: {
-    padding: 12,
-    alignItems: 'center',
-
-  },
-
-  loadMoreText: {
-    color: '#075cab',
-    fontWeight: 'bold',
-  },
 
   container1: {
     flex: 1,
@@ -611,7 +469,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
-    paddingBottom:20
+    paddingBottom: 20
   },
 
   icon1: {
@@ -739,11 +597,11 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   companyCount: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '400',
     color: 'black',
     padding: 5,
-    paddingHorizontal: 10
+    paddingHorizontal: 15,
   },
   cardContainer: {
     flexDirection: 'row',
@@ -768,19 +626,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   cardImage: {
-    width: 140,
-    height: 140,
+    width: '100%',
+    height: '100%',
     borderRadius: 100,
     margin: 'auto',
-    top: 10,
-    resizeMode: 'contain',
   },
   cardImage1: {
     width: 140,
     height: 140,
     borderRadius: 100,
-    margin: 'auto',
-
+    alignSelf: 'center',
+    marginTop: 10,
   },
 
   textContainer: {

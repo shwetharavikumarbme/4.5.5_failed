@@ -15,6 +15,7 @@ import Fuse from 'fuse.js';
 import { showToast } from '../AppUtils/CustomToast';
 import { useConnection } from '../AppUtils/ConnectionProvider';
 import AppStyles from '../../assets/AppStyles';
+import { highlightMatch } from '../helperComponents.jsx/signedUrls';
 
 const ServicesList = () => {
     const { isConnected } = useConnection();
@@ -31,64 +32,9 @@ const ServicesList = () => {
     const [fetchLimit, setFetchLimit] = useState(3);
     const [searchResults, setSearchResults] = useState(false);
     const [searchTriggered, setSearchTriggered] = useState(false);
-    const [suggestions, setSuggestions] = useState([]);
-    const [suggestionsLimit, setSuggestionsLimit] = useState(5);
-    const [allServices, setAllServices] = useState();
-
-    const fetchAllServices = async () => {
-        try {
-            const requestData = { command: 'getAllServices' };
-            const res = await apiClient.post('/getAllServices', requestData);
-            const Allservices = res?.data?.response || [];
-
-            setAllServices(Allservices);
-
-        } catch (error) {
-
-        } finally {
-            setLoading(false);
-        }
-    };
 
 
-    useEffect(() => {
-        fetchAllServices();
-    }, []);
 
-    const getFuzzySuggestions = (inputText) => {
-        const fuse = new Fuse(allServices, {
-            keys: ['title', 'category', 'company_name'],
-            threshold: 0.5,
-            distance: 100,
-        });
-
-        const results = fuse.search(inputText);
-        const uniqueMap = new Map();
-
-        results.forEach(res => {
-            const { title, category, company_name } = res.item;
-            const key = `${title}|${category}|${company_name}`;
-
-            if (!uniqueMap.has(key)) {
-                uniqueMap.set(key, res.item);
-            }
-        });
-
-        return Array.from(uniqueMap.values());
-    };
-
-    const handleInputChange = (text) => {
-        setSearchQuery(text);
-        setSuggestionsLimit(5);
-
-        if (text.trim() === '') {
-            setSuggestions([]);
-            return;
-        }
-
-        const matchedSuggestions = getFuzzySuggestions(text);
-        setSuggestions(matchedSuggestions);
-    };
 
     const withTimeout = (promise, timeout = 10000) => {
         return Promise.race([
@@ -186,7 +132,27 @@ const ServicesList = () => {
     }, []);
 
 
+    const debounceTimeout = useRef(null);
 
+    const handleDebouncedTextChange = useCallback((text) => {
+        setSearchQuery(text);
+
+        if (debounceTimeout.current) {
+            clearTimeout(debounceTimeout.current);
+        }
+
+        const trimmedText = text.trim();
+
+        if (trimmedText === '') {
+            setSearchTriggered(false);
+            setSearchResults([]);
+            return;
+        }
+
+        debounceTimeout.current = setTimeout(() => {
+            handleSearch(trimmedText); 
+        }, 300);
+    }, [handleSearch]);
 
     const handleSearch = async (text, selectedCategories = {}) => {
         if (!isConnected) {
@@ -199,13 +165,8 @@ const ServicesList = () => {
         if (text.trim() === '' && Object.keys(selectedCategories).length === 0) {
             setSearchTriggered(false);
             setSearchResults([]);
-
             return;
         }
-
-        setSearchTriggered(true);
-        setLoading(true);
-        searchInputRef.current?.blur();
 
         const selectedCategoryKeys = Object.keys(selectedCategories).filter(
             (key) => selectedCategories[key]
@@ -229,7 +190,6 @@ const ServicesList = () => {
 
         } finally {
             setSearchTriggered(true);
-            setLoading(false);
 
         }
     };
@@ -250,7 +210,7 @@ const ServicesList = () => {
         setRefreshing(true);
 
         setSearchQuery('');
-        setSuggestions([]);
+
         setSearchResults([]);
         setSearchTriggered(false);
         setLastEvaluatedKey(null);
@@ -292,10 +252,13 @@ const ServicesList = () => {
 
                 <View style={styles.cardContent}>
                     <View>
-                        <Text numberOfLines={1} style={styles.title}>{item.title || ' '}</Text>
+                        {/* <Text numberOfLines={1} style={styles.title}>{item.title || ' '}</Text> */}
+                        <Text numberOfLines={1} style={styles.title}>{highlightMatch(item?.title || '', searchQuery)}</Text>
+                        <Text numberOfLines={1} style={styles.description}>{highlightMatch(item?.description || '', searchQuery)}</Text>
+                        <Text numberOfLines={1} style={styles.company}>{highlightMatch(item?.company_name || '', searchQuery)}</Text>
 
-                        <Text numberOfLines={1} style={styles.description}>{item.description || ' '}</Text>
-                        <Text numberOfLines={1} style={styles.company}>{item.company_name || ' '}</Text>
+                        {/* <Text numberOfLines={1} style={styles.description}>{item.description || ' '}</Text>
+                        <Text numberOfLines={1} style={styles.company}>{item.company_name || ' '}</Text> */}
 
                         {(item.price ?? '').toString().trim() !== '' ? (
                             <View style={styles.priceRow}>
@@ -332,17 +295,8 @@ const ServicesList = () => {
                             placeholder="Search"
                             placeholderTextColor="gray"
                             value={searchQuery}
+                            onChangeText={handleDebouncedTextChange}
 
-                            onChangeText={handleInputChange}
-                            onSubmitEditing={() => {
-                                if (searchQuery.trim() !== '') {
-                                    handleSearch(searchQuery);
-                                    setSearchTriggered(true);
-                                    setSuggestions([]);
-                                    searchInputRef.current?.blur();
-                                }
-                            }}
-                            returnKeyType="search"
                         />
                         {searchQuery.trim() !== '' ? (
                             <TouchableOpacity
@@ -350,7 +304,7 @@ const ServicesList = () => {
                                     setSearchQuery('');
                                     setSearchTriggered(false);
                                     setSearchResults([]);
-                                    setSuggestions([]);
+
 
                                 }}
                                 style={AppStyles.iconButton}
@@ -359,15 +313,7 @@ const ServicesList = () => {
                             </TouchableOpacity>
                         ) : (
                             <TouchableOpacity
-                                // onPress={() => {
-                                //     if (searchQuery.trim() !== '') {
-                                //         handleSearch(searchQuery);
-                                //         setSearchTriggered(true);
-                                //         setSuggestions([]);
-                                //         searchInputRef.current?.blur();
 
-                                //     }
-                                // }}
                                 style={AppStyles.searchIconButton}
                             >
                                 <Icon name="magnify" size={20} color="#075cab" />
@@ -380,142 +326,53 @@ const ServicesList = () => {
             </View>
 
 
-            {suggestions.length > 0 && (
+            {!loading ? (
+                <FlatList
+                    data={!searchTriggered || searchQuery.trim() === '' ? services : searchResults}
+                    renderItem={renderItem}
+                    onScrollBeginDrag={() => {
+                        Keyboard.dismiss();
+                        searchInputRef.current?.blur?.();
 
-                <ScrollView
-                    style={styles.suggestionContainer}
+                    }}
                     keyboardShouldPersistTaps="handled"
-                    contentContainerStyle={{ backgroundColor: '#fff' }}
-                >
-
-                    {suggestions.slice(0, suggestionsLimit).map((item, index) => (
-                        <TouchableOpacity
-                            key={index}
-                            onPress={() => {
-                                setSearchQuery(`${item.title}, ${item.category}, ${item.company_name}`);
-                                handleSearch(item.title, item.category, item.company_name);
-                                setSuggestions([]);
-                                setSuggestionsLimit(5);
-                                searchInputRef.current?.blur();
-                            }}
-                            style={styles.suggestionItem}
-                        >
-
-                            <Text style={styles.suggestionTitle}>{`${item.title}`} - {`${item.category}`}</Text>
-                            <Text style={styles.suggestionJob}>{`${item.company_name}`}</Text>
-
-                        </TouchableOpacity>
-                    ))}
-
-
-                    {suggestions.length > suggestionsLimit && (
-                        <TouchableOpacity
-                            onPress={() => setSuggestionsLimit(suggestionsLimit + 5)}
-                            style={styles.loadMoreButton}
-                        >
-                            <Text style={styles.loadMoreText}>Load More</Text>
-                        </TouchableOpacity>
-                    )}
-                </ScrollView>
-
+                    keyExtractor={(item, index) => `${item.service_id}-${index}`}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.flatListContainer}
+                    onEndReached={() => lastEvaluatedKey && fetchservices(lastEvaluatedKey)}
+                    onEndReachedThreshold={0.5}
+                    ListEmptyComponent={
+                        (searchTriggered && searchResults.length === 0) ? (
+                            <View style={{ alignItems: 'center', marginTop: 40 }}>
+                                <Text style={{ fontSize: 16, color: '#666' }}>No services found</Text>
+                            </View>
+                        ) : null
+                    }
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#075cab']} />
+                    }
+                    ListHeaderComponent={
+                        <View>
+                            {!loading && searchQuery.trim() !== '' && searchResults.length > 0 && (
+                                <Text style={styles.companyCount}>
+                                    {searchResults.length} results found
+                                </Text>
+                            )}
+                        </View>
+                    }
+                />
+            ) : (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <ActivityIndicator color={'#075cab'} size="large" />
+                </View>
             )}
 
-            <TouchableWithoutFeedback
-                onPress={() => {
-                    Keyboard.dismiss();
-                    searchInputRef.current?.blur?.();  // Optional chaining in case ref is not set yet
-                    setSuggestions([]);
-                }}
-            >
-                {!loading ? (
-                    <FlatList
-                        data={!searchTriggered || searchQuery.trim() === '' ? services : searchResults}
-                        renderItem={renderItem}
-                        onScrollBeginDrag={() => {
-                            Keyboard.dismiss();
-                            searchInputRef.current?.blur?.();
-                            setSuggestions([]);
-                        }}
-                        keyboardShouldPersistTaps="handled"
-                        keyExtractor={(item, index) => `${item.service_id}-${index}`}
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={styles.flatListContainer}
-                        onEndReached={() => lastEvaluatedKey && fetchservices(lastEvaluatedKey)}
-                        onEndReachedThreshold={0.5}
-                        ListEmptyComponent={
-                            (searchTriggered && searchResults.length === 0) ? (
-                                <View style={{ alignItems: 'center', marginTop: 40 }}>
-                                    <Text style={{ fontSize: 16, color: '#666' }}>No services found</Text>
-                                </View>
-                            ) : null
-                        }
-                        refreshControl={
-                            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#075cab']} />
-                        }
-                        ListHeaderComponent={
-                            <View>
-                                {!loading && searchQuery.trim() !== '' && searchResults.length > 0 && (
-                                    <Text style={styles.companyCount}>
-                                        {searchResults.length} results found
-                                    </Text>
-                                )}
-                            </View>
-                        }
-                    />
-                ) : (
-                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                        <ActivityIndicator color={'#075cab'} size="large" />
-                    </View>
-                )}
-
-            </TouchableWithoutFeedback>
 
         </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
-    suggestionContainer: {
-        position: 'absolute',
-        top: 50, // adjust depending on your header/search bar height
-        width: '95%',
-        alignSelf: 'center',
-        maxHeight: '45%',
-        backgroundColor: '#fff',
-        borderRadius: 8,
-        paddingVertical: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 5,
-        zIndex: 999, // ensures it's above FlatList
-    },
-
-    suggestionItem: {
-        padding: 7,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
-    },
-    suggestionTitle: {
-        fontSize: 14,
-        color: 'black'
-    },
-    suggestionJob: {
-        fontSize: 12,
-        color: '#888'
-    },
-
-    loadMoreButton: {
-        padding: 10,
-        alignItems: 'center',
-
-    },
-
-    loadMoreText: {
-        color: '#075cab',
-        fontWeight: 'bold',
-    },
 
     bottomNavContainer: {
         flexDirection: 'row',

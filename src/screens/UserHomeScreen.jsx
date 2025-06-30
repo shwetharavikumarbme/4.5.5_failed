@@ -16,7 +16,7 @@ import { updateCompanyProfile } from './Redux/MyProfile/CompanyProfile_Actions';
 import { useNetwork } from './AppUtils/IdProvider';
 import useFetchData from './helperComponents.jsx/HomeScreenData';
 import { useConnection } from './AppUtils/ConnectionProvider';
-import { getSignedUrl } from './helperComponents.jsx/signedUrls';
+import { getSignedUrl, getTimeDisplay } from './helperComponents.jsx/signedUrls';
 import { styles } from '../assets/AppStyles';
 import { ForumPostBody } from './Forum/forumBody';
 
@@ -176,66 +176,84 @@ const UserHomeScreen = React.memo(() => {
 
 
   const renderForumCard = ({ item }) => {
+    if (!item || !item.forum_id) return null;
+    const AuthorImageUrl = authorImageUrls?.[item.forum_id]
 
     const rawHtml = (item.forum_body || '').trim();
     const hasHtmlTags = /<\/?[a-z][\s\S]*>/i.test(rawHtml);
     const forumBodyHtml = hasHtmlTags ? rawHtml : `<p>${rawHtml}</p>`;
 
-    if (!item || !item.forum_id) return null;
-
     const imageUrl = trendingImageUrls?.[item.forum_id] || latestImageUrls?.[item.forum_id];
     const isVideo = item.fileKey?.endsWith('.mp4');
-    const isImage = /\.(jpg|jpeg|png|gif|bmp|svg|webp|tiff)$/i.test(item.fileKey || '');
-
-    const formattedPostedTime = new Date(item.posted_on * 1000).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
 
     return (
       <TouchableOpacity
-        style={styles.heroCard}
         activeOpacity={0.9}
+        style={styles.articleCard}
         onPress={() => navigation.navigate("Comment", { forum_id: item.forum_id })}
       >
-        {isVideo ? (
-          <Video
-            source={{ uri: imageUrl }}
-            style={styles.heroImage}
-            resizeMode="cover"
-            muted
-            paused
-          />
-        ) : (
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.heroImage}
-            resizeMode="cover"
-          />
-        )}
-        <View style={styles.overlay}>
-          <View style={styles.overlayHeader}>
-            <Text numberOfLines={1} style={styles.metaLine}>
-              <Text style={styles.metaLabel}>Author: </Text>
-              <Text style={styles.metaValue}>{item.author || 'Unknown'}</Text>
-            </Text>
+        <View style={styles.articleCardHeader}>
+          {/* Vertical stack for badge, image, name */}
+          <View >
 
-            <Text style={styles.metaDate}>{formattedPostedTime}</Text>
+            <View style={[styles.authorRow]}>
+              <Image
+                source={{ uri: AuthorImageUrl }}
+                style={styles.authorImage}
+                resizeMode="cover"
+              />
+
+              <View style={styles.authorInfo}>
+                <Text style={styles.authorName}>{item.author || 'No Name'}</Text>
+
+                <Text style={styles.badgeText}>{item.author_category || 'UX'}</Text>
+
+              </View>
+            </View>
+            <View >
+              <Text style={styles.articleTime}>{getTimeDisplay(item.posted_on)}</Text>
+
+            </View>
+
+
+
           </View>
 
-          <ForumPostBody
-            html={forumBodyHtml}
-            forumId={item?.forum_id}
-            numberOfLines={2}
 
-          />
+
+          {/* Post image or video if available */}
+          {imageUrl && (
+            isVideo ? (
+              <Video
+                source={{ uri: imageUrl }}
+                style={styles.articleMedia}
+                resizeMode="cover"
+                muted
+                paused
+              />
+            ) : (
+              <Image
+                source={{ uri: imageUrl }}
+                style={styles.articleMedia}
+                resizeMode="cover"
+              />
+            )
+          )}
 
         </View>
 
+
+        <ForumPostBody
+          html={forumBodyHtml}
+          forumId={item?.forum_id}
+          numberOfLines={4}
+          textStyle={styles.articleExcerpt}
+        />
       </TouchableOpacity>
+
     );
   };
+
 
   const renderProductCard = ({ item }) => {
     if (!item || !item.product_id) return null;
@@ -356,6 +374,7 @@ const UserHomeScreen = React.memo(() => {
     trendingImageUrls,
     productImageUrls,
     servicesImageUrls,
+    authorImageUrls,
     refreshData,
 
   } = useFetchData({ shouldFetch: isProfileFetched });
