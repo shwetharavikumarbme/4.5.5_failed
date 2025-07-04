@@ -64,65 +64,76 @@ const CommentInputBar = ({
     const trimmedText = text.trim();
     if (!trimmedText) return;
     setLoading(true);
-
+  
     try {
       if (selectedComment) {
+        console.log('Updating comment...');
+  
         const updatePayload = {
           command: 'updateComment',
           user_id: storedUserId,
           comment_id: selectedComment.comment_id,
           text: trimmedText,
         };
-
+  
+        console.log('Update payload:', updatePayload);
         const response = await apiClient.post('/updateComment', updatePayload);
-
+        console.log('Update response:', response?.data);
+  
         if (response?.data?.status === 'SUCCESS') {
           const updatedCommentWithUrl = await getSignedUrlForComment({
             comment_id: selectedComment.comment_id,
             text: trimmedText,
             fileKey: selectedComment.fileKey,
           });
-
+  
+          console.log('Updated comment with signed URL:', updatedCommentWithUrl);
           showToast('Comment updated', 'success');
           onEditComplete?.(updatedCommentWithUrl);
           setText('');
           setSelectedComment(null);
         } else {
-
+          console.error('Update failed:', response?.data);
+          showToast('Failed to update comment', 'error');
         }
       } else {
+        console.log('Adding new comment...');
+  
         const payload = {
           command: 'addComments',
           user_id: storedUserId,
           forum_id,
           text: trimmedText,
         };
-
+  
+        console.log('Add comment payload:', payload);
         const response = await apiClient.post('/addComments', payload);
-
-if (response?.data?.status === 'success') {
-  const newCommentWithUrl = await getSignedUrlForComment(response.data.comment_details);
-  onCommentAdded?.(newCommentWithUrl);
-  setText('');
-  showToast('Comment posted successfully', 'success');
-  EventRegister.emit('onCommentAdded', { forum_id });
-} else {
-  const errorMessage = response?.data?.errorMessage || 'Failed to add comment';
-  showToast(errorMessage, 'error');
-  console.log('Failed to add comment:', response?.data);
-}
-
+        console.log('Add comment response:', response?.data);
+  
+        if (response?.data?.status === 'success') {
+          const newCommentWithUrl = await getSignedUrlForComment(response.data.comment_details);
+          console.log('New comment with signed URL:', newCommentWithUrl);
+  
+          onCommentAdded?.(newCommentWithUrl);
+          setText('');
+          showToast('Comment posted successfully', 'success');
+          EventRegister.emit('onCommentAdded', { forum_id });
+        } else {
+          const errorMessage = response?.data?.errorMessage || 'Failed to add comment';
+          showToast(errorMessage, 'error');
+          console.error('Failed to add comment:', response?.data);
+        }
       }
     } catch (error) {
       const errorMessage =
         error?.response?.data?.errorMessage || error?.message || 'Something went wrong';
       showToast(errorMessage, 'error');
       console.error('Comment action failed:', error);
-    }
-    finally {
+    } finally {
       setLoading(false);
     }
   };
+  
 
 
 

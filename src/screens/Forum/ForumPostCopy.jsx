@@ -41,7 +41,7 @@ const videoExtensions = [
 ];
 
 
-const ForumPostScreen = () => {
+const ForumPostScreenCopy = () => {
   const dispatch = useDispatch();
   const profile = useSelector(state => state.CompanyProfile.profile);
   const { myId, myData } = useNetwork();
@@ -420,73 +420,84 @@ const ForumPostScreen = () => {
 
   const handlePostSubmission = async () => {
     if (loading) return;
-
+  
     setHasChanges(true);
     setLoading(true);
-
+  
     try {
       setHasChanges(false);
-
+  
       const sanitizedBody = cleanForumHtml(postData.body);
-
       const plainText = stripHtmlTags(sanitizedBody);
+      
       if (!plainText.trim()) {
         showToast("Description is mandatory", "info");
         return;
       }
-
-
+  
       const uploadedFiles = await handleUploadFile();
       if (!uploadedFiles) throw new Error("File upload failed.");
-
+  
       const { fileKey, thumbnailFileKey } = uploadedFiles;
-
+  
       const postPayload = {
         command: "postInForum",
         user_id: myId,
-        forum_body: sanitizedBody, // ✅ cleaned before submit
+        forum_body: sanitizedBody,
         fileKey,
         thumbnail_fileKey: thumbnailFileKey,
         extraData: mediaMeta || {}
-
       };
-
-
+  
       const res = await apiClient.post('/postInForum', postPayload);
-
+  
       if (res.data.status !== 'success') throw new Error("Failed to submit post.");
-
-      setHasChanges(false);
-
+  
+      // Clear all post data
+      setPostData({
+        body: '',
+        fileKey: '',
+      });
+      setFile(null);
+      setFileType('');
+      setThumbnailUri(null);
+      setCapturedThumbnailUri(null);
+      setMediaMeta(null);
+      
+      // Reset rich text editor
+      if (richText.current) {
+        richText.current.setContentHTML('');
+      }
+  
       let newPost = res.data.forum_details;
-
       newPost = {
         ...newPost,
         user_type: profile.user_type,
       };
-
+  
       EventRegister.emit('onForumPostCreated', {
         newPost: newPost,
         profile: profile,
       });
-
+  
       showToast("Forum post submitted successfully", "success");
-      navigation.goBack();
-
+      
+      // Emit event to reset tab in PageView
+      EventRegister.emit('navigateToAllTab');
+      
+      // Navigate back
+      // navigation.goBack();
+  
     } catch (error) {
       console.log("Submission error:", error);
-
       if (error?.message?.includes("Network Error")) {
         showToast("Check your internet connection", "error");
       } else if (error?.response?.data) {
-        // If API responded with a body (like validation errors)
-        console.log("API response error:", error.response.data);
         showToast(error.response.data?.message || "Something went wrong", "error");
       } else {
         showToast("Something went wrong", "error");
       }
-    }
-    finally {
+    } finally {
       setLoading(false);
       setHasChanges(false);
     }
@@ -513,29 +524,6 @@ const ForumPostScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-
-      <View style={styles.headerContainer}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="close" size={24} color="black" />
-
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={handlePostSubmission}
-          style={[
-            AppStyles.buttonContainer,
-            !isFormValid || loading || isCompressing ? styles.disabledButton : null,
-          ]}
-          disabled={!isFormValid || loading || isCompressing}
-        >
-          {loading || isCompressing ? (
-            <ActivityIndicator size="small" />
-          ) : (
-            <Text style={[styles.buttonText, (!postData.body.trim()) && styles.buttonDisabledText]} >Post</Text>
-          )}
-        </TouchableOpacity>
-
-      </View>
-
 
 
       <KeyboardAwareScrollView
@@ -568,6 +556,8 @@ const ForumPostScreen = () => {
             </View>
 
           </View>
+
+
 
 
           <RichEditor
@@ -669,6 +659,10 @@ const ForumPostScreen = () => {
 
 
           <View style={AppStyles.UpdateContainer}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={[AppStyles.cancelBtn,]}>
+              <Text style={[styles.buttonTextdown, { color: '#FF0000' }]}  >Cancel</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               onPress={handlePostSubmission}
               style={[
@@ -691,9 +685,6 @@ const ForumPostScreen = () => {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => navigation.goBack()} style={[AppStyles.cancelBtn,]}>
-              <Text style={[styles.buttonTextdown, { color: '#FF0000' }]}  >Cancel</Text>
-            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </KeyboardAwareScrollView>
@@ -838,4 +829,4 @@ const styles = StyleSheet.create({
   }
 });
 
-export default ForumPostScreen;
+export default ForumPostScreenCopy;

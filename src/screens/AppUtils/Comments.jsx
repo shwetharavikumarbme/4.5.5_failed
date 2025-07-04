@@ -11,7 +11,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import { useBottomSheet } from './SheetProvider';
 import { showToast } from './CustomToast';
-import { setCommentsCount } from '../Redux/Forum_Actions';
 import { useConnection } from './ConnectionProvider';
 import { getTimeDisplay } from '../helperComponents.jsx/signedUrls';
 

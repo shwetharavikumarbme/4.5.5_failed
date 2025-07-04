@@ -136,7 +136,7 @@ const UserDrawerNav = () => {
               drawerIcon: ({ color, size }) => <Icon name="home" size={size} color={color} style={{ fontWeight: 'normal' }} />,
             }}
           />
-          <Drawer.Screen
+          {/* <Drawer.Screen
             name="Trending"
             component={TrendingDrawer}
             options={{
@@ -144,7 +144,7 @@ const UserDrawerNav = () => {
               unmountOnBlur: true,
 
             }}
-          />
+          /> */}
           <Drawer.Screen
             name="Companies"
             component={CompanyListNav}

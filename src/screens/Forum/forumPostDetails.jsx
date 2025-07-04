@@ -41,7 +41,7 @@ import CommentsSection from '../AppUtils/Comments';
 import CommentInputBar from '../AppUtils/InputBar';
 import { EventRegister } from 'react-native-event-listeners';
 import { useConnection } from '../AppUtils/ConnectionProvider';
-import { getSignedUrl, getTimeDisplay } from '../helperComponents.jsx/signedUrls';
+import { getSignedUrl, getTimeDisplay, getTimeDisplayForum } from '../helperComponents.jsx/signedUrls';
 import { openMediaViewer } from '../helperComponents.jsx/mediaViewer';
 import { ForumReactions } from '../helperComponents.jsx/ForumReactions';
 import ReactionSheet, { ReactionUserSheet } from '../helperComponents.jsx/ReactionUserSheet';
@@ -195,20 +195,20 @@ const CommentScreen = ({ route }) => {
 
       return;
     }
-  
+
     seLoading(true);
-  
+
     try {
       const requestData = {
         command: 'getForumPost',
         forum_id: forum_id,
       };
-  
+
       const res = await withTimeout(apiClient.post('/getForumPost', requestData), 5000);
-  
+
       if (res.data.status === 'success') {
         const postData = res.data.response.length > 0 ? res.data.response[0] : null;
-  
+
         if (!postData) {
 
           setErrorMessage('This post was removed by the author');
@@ -217,24 +217,24 @@ const CommentScreen = ({ route }) => {
           seLoading(false);
           return;
         }
-  
+
         setPost(postData);
         await fetchCommentsCount(forum_id);
-  
+
         const [mediaRes, authorMediaRes] = await Promise.all([
           getSignedUrl('mediaUrl', postData.fileKey),
           getSignedUrl('mediaUrl1', postData.author_fileKey),
         ]);
-  
+
         const mediaUrl = mediaRes.mediaUrl || '';
         const rawMediaUrl1 = authorMediaRes.mediaUrl1 || '';
 
         const isValidUrl = (url) => /^https?:\/\/.+\.(png|jpe?g|webp|gif)$/.test(url);
         const mediaUrl1 = isValidUrl(rawMediaUrl1) ? rawMediaUrl1 : getFallbackImage(postData);
-  
+
         setMediaUrl(mediaUrl);
         setMediaUrl1(mediaUrl1);
-  
+
         seLoading(false);
       } else {
 
@@ -251,13 +251,13 @@ const CommentScreen = ({ route }) => {
       } else {
         setErrorMessage('This post was removed by the author');
       }
-  
+
       setMediaUrl('');
       setMediaUrl1(getFallbackImage({}));
       seLoading(false);
     }
   };
-  
+
 
 
   useEffect(() => {
@@ -479,7 +479,7 @@ const CommentScreen = ({ route }) => {
 
             <View style={styles.rightHeader}>
               <Text style={styles.timeText}>
-                {getTimeDisplay(post?.posted_on)}
+                {getTimeDisplayForum(post?.posted_on)}
               </Text>
             </View>
           </View>
@@ -487,7 +487,7 @@ const CommentScreen = ({ route }) => {
 
           <View style={{ paddingHorizontal: 10 }}>
             <ForumBody
-             html={normalizeHtml(post?.forum_body)}
+              html={normalizeHtml(post?.forum_body)}
               forumId={post?.forum_id}
               isExpanded={expandedTexts[post?.forum_id]}
               toggleFullText={toggleFullText}
@@ -535,7 +535,7 @@ const CommentScreen = ({ route }) => {
           ) : null}
           <View style={styles.divider} />
 
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 10 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 10, height: 40 }}>
             <View>
               <TouchableOpacity
                 onPress={async () => {
@@ -562,9 +562,22 @@ const CommentScreen = ({ route }) => {
                   </>
                 ) : (
                   <>
-                    <Text style={{ fontSize: 12, color: '#777', marginRight: 6 }}>React: </Text>
+                    {/* <Text style={{ fontSize: 12, color: '#777', marginRight: 6 }}>React: </Text> */}
                     <Icon name="thumb-up-outline" size={20} color="#999" />
                   </>
+                )}
+                {totalReactions > 0 && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      reactionSheetRef.current?.open(post?.forum_id, 'All');
+                    }}
+                    disabled={updating}
+                    style={{ paddingHorizontal: 8 }}
+                  >
+                    <Text style={{ color: '#333', fontSize: 12, fontWeight: '500' }}>
+                      ({totalReactions})
+                    </Text>
+                  </TouchableOpacity>
                 )}
               </TouchableOpacity>
 
@@ -627,7 +640,7 @@ const CommentScreen = ({ route }) => {
               </View>
             </View>
 
-
+            {/* 
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               {totalReactions > 0 && (
                 <TouchableOpacity
@@ -664,7 +677,7 @@ const CommentScreen = ({ route }) => {
                   </TouchableOpacity>
                 ))}
               </View>
-            </View>
+            </View> */}
           </View>
 
 
@@ -1080,7 +1093,7 @@ const styles = StyleSheet.create({
   timeText: {
     fontSize: 13,
     fontWeight: '300',
-    color: 'black',
+    color: '#666',
   },
 
 });

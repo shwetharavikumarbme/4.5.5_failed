@@ -16,7 +16,7 @@ import { updateCompanyProfile } from './Redux/MyProfile/CompanyProfile_Actions';
 import { useNetwork } from './AppUtils/IdProvider';
 import useFetchData from './helperComponents.jsx/HomeScreenData';
 import { useConnection } from './AppUtils/ConnectionProvider';
-import { getSignedUrl, getTimeDisplay } from './helperComponents.jsx/signedUrls';
+import { getSignedUrl, getTimeDisplay, getTimeDisplayForum, getTimeDisplayHome } from './helperComponents.jsx/signedUrls';
 import { styles } from '../assets/AppStyles';
 import { ForumPostBody } from './Forum/forumBody';
 
@@ -66,10 +66,10 @@ const UserHomeScreen = React.memo(() => {
 
   const sectionThresholds = {
     jobs: 234,
-    trendingPosts: 1594,
-    latestPosts: 4247,
-    products: 6692,
-    services: 8772,
+    trendingPosts: 1592.6666666666667,
+    latestPosts: 3807,
+    products: 5819.333333333333,
+    services: 7509.666666666667,
   };
 
 
@@ -79,8 +79,7 @@ const UserHomeScreen = React.memo(() => {
       useNativeDriver: true,
       listener: (event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
-        console.log('offsetY', offsetY);
-
+console.log(offsetY)
         const entries = Object.entries(sectionThresholds);
         for (let i = entries.length - 1; i >= 0; i--) {
           const [section, threshold] = entries[i];
@@ -139,7 +138,7 @@ const UserHomeScreen = React.memo(() => {
   const renderJobCard = ({ item }) => {
     if (!item || item.isEmpty) return null;
 
-    const { post_id, job_title, experience_required, Package } = item;
+    const { post_id, job_title, experience_required, Package, job_post_created_on } = item;
     const imageUrl = jobImageUrls?.[item.post_id];
 
     return (
@@ -169,19 +168,19 @@ const UserHomeScreen = React.memo(() => {
             {Package || 'Not disclosed'}
           </Text>
 
+          <Text style={styles.eduSubText}>
+            <Text style={styles.label}>Posted: </Text>
+            {getTimeDisplayHome(job_post_created_on) || 'Not disclosed'}
+          </Text>
+
         </View>
       </TouchableOpacity>
     );
   };
 
-
   const renderForumCard = ({ item }) => {
     if (!item || !item.forum_id) return null;
     const AuthorImageUrl = authorImageUrls?.[item.forum_id]
-
-    const rawHtml = (item.forum_body || '').trim();
-    const hasHtmlTags = /<\/?[a-z][\s\S]*>/i.test(rawHtml);
-    const forumBodyHtml = hasHtmlTags ? rawHtml : `<p>${rawHtml}</p>`;
 
     const imageUrl = trendingImageUrls?.[item.forum_id] || latestImageUrls?.[item.forum_id];
     const isVideo = item.fileKey?.endsWith('.mp4');
@@ -206,16 +205,15 @@ const UserHomeScreen = React.memo(() => {
               <View style={styles.authorInfo}>
                 <Text style={styles.authorName}>{item.author || 'No Name'}</Text>
 
-                <Text style={styles.badgeText}>{item.author_category || 'UX'}</Text>
+                <Text style={styles.badgeText}>{item.author_category || ''}</Text>
 
               </View>
             </View>
             <View >
-              <Text style={styles.articleTime}>{getTimeDisplay(item.posted_on)}</Text>
+            <Text style={styles.PostedLabel}>Posted on: <Text style={styles.articleTime}>{getTimeDisplayForum(item.posted_on)}</Text></Text>
 
+          
             </View>
-
-
 
           </View>
 
@@ -244,7 +242,7 @@ const UserHomeScreen = React.memo(() => {
 
 
         <ForumPostBody
-          html={forumBodyHtml}
+          html={item.forum_body}
           forumId={item?.forum_id}
           numberOfLines={4}
           textStyle={styles.articleExcerpt}
@@ -253,7 +251,6 @@ const UserHomeScreen = React.memo(() => {
 
     );
   };
-
 
   const renderProductCard = ({ item }) => {
     if (!item || !item.product_id) return null;
@@ -280,24 +277,24 @@ const UserHomeScreen = React.memo(() => {
             <Text numberOfLines={1} style={styles.eduTitle}>{item.title || ' '}</Text>
           </View>
 
-          <Text style={styles.modelText}>
-            <Text style={styles.label}>model_name: </Text>
-            {item.specifications.model_name || ' '}
+          <Text numberOfLines={1} style={styles.modelText}>
+            {/* <Text style={styles.label}>Model name: </Text> */}
+            <Icon name="tag-outline" size={16} color='#666' /> {item.specifications.model_name || ' '}
           </Text>
 
-          <Text style={styles.descriptionText} numberOfLines={3}>
-            <Text style={styles.label}>description: </Text>
-            {item.description || ' '}
+          <Text style={styles.descriptionText} numberOfLines={1}>
+            {/* <Text style={styles.label}>Description: </Text> */}
+            <Icon name="text-box-outline" size={16} color='#666' /> {item.description || ' '}
           </Text>
 
-          <Text style={styles.companyNameText}>
-            <Text style={styles.label}>company_name: </Text>
-            {item.company_name || ' '}
-          </Text>
+          <Text numberOfLines={1} style={styles.companyNameText}>
+            {/* <Text style={styles.label}>Company name: </Text> */}
+            <Icon name="office-building-outline" size={16} color='#666' /> {item.company_name || ' '}</Text>
 
           {(item.price ?? '').toString().trim() !== '' ? (
             <View style={styles.priceRow}>
-              <Text numberOfLines={1} style={styles.price}>₹ {item.price}</Text>
+              <Text numberOfLines={1} style={styles.price}><Icon name="currency-inr" size={16} color='#666' />
+              {item.price}</Text>
             </View>
           ) : (
             <Text style={styles.eduSubText}>₹ Not specified</Text>
@@ -334,19 +331,20 @@ const UserHomeScreen = React.memo(() => {
             <Text numberOfLines={1} style={styles.eduTitle}>{item.title || ' '}</Text>
           </View>
 
-          <Text style={styles.descriptionText} numberOfLines={3}>
-            <Text style={styles.label}>description: </Text>
-            {item.description || ' '}
+          <Text style={styles.descriptionText} numberOfLines={1}>
+            {/* <Text style={styles.label}>Description: </Text> */}
+            <Icon name="text-box-outline" size={16} color='#666' /> {item.description || ' '}
           </Text>
 
-          <Text style={styles.companyNameText}>
-            <Text style={styles.label}>company_name: </Text>
-            {item.company_name || ' '}
+          <Text numberOfLines={1}  style={styles.companyNameText}>
+            {/* <Text style={styles.label}>Company name: </Text> */}
+            <Icon name="office-building-outline" size={16} color='#666' /> {item.company_name || ' '}
           </Text>
 
           {(item.price ?? '').toString().trim() !== '' ? (
             <View style={styles.priceRow}>
-              <Text numberOfLines={1} style={styles.price}>₹ {item.price}</Text>
+              <Text numberOfLines={1} style={styles.price}><Icon name="currency-inr" size={16} color='#666' />
+              {item.price} </Text>
             </View>
           ) : (
             <Text style={styles.eduSubText}>₹ Not specified</Text>
@@ -560,65 +558,19 @@ const UserHomeScreen = React.memo(() => {
 
       </View>
 
-      {/* <Animated.View
-  style={[
-    styles.tabContainer,
-    {
-      opacity: scrollOffsetY.interpolate({
-        inputRange: [100, 174],
-        outputRange: [0, 1],
-        extrapolate: 'clamp',
-      }),
-      transform: [
-        {
-          translateY: scrollOffsetY.interpolate({
-            inputRange: [100, 174],
-            outputRange: [-20, 0],
-            extrapolate: 'clamp',
-          }),
-        },
-      ],
-    },
-  ]}
->
-<FlatList
-  horizontal
-  ref={tabFlatListRef}
-  data={tabLabels}
-  renderItem={({ item }) => renderTab(item)}
-  keyExtractor={(item) => item}
-  showsHorizontalScrollIndicator={false}
-  contentContainerStyle={styles.tabListContent}
-  getItemLayout={(data, index) => ({
-    length: 90,
-    offset: 90 * index,
-    index,
-  })}
-  scrollToIndexFailed={({ index }) => {
-    setTimeout(() => {
-      tabFlatListRef.current?.scrollToIndex({ index, animated: true });
-    }, 200);
-  }}
-  
-/>
-
-</Animated.View> */}
-
-
-
       <AnimatedFlatList
         showsVerticalScrollIndicator={false}
         ref={flatListRef}
         onScroll={handleScroll}
 
         scrollEventThrottle={16}
-        stickyHeaderIndices={[1]}
+        // stickyHeaderIndices={[1]}
         onScrollBeginDrag={() => Keyboard.dismiss()}
         contentContainerStyle={{ paddingBottom: '20%', backgroundColor: 'whitesmoke' }}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
         data={[
           { type: 'banner1' },
-          { type: 'tabs' }, // 👈 This is now sticky!
+          // { type: 'tabs' }, 
           { type: 'jobs', data: jobs },
           { type: 'banner2' },
           { type: 'trendingPosts', data: trendingPosts },
@@ -636,30 +588,30 @@ const UserHomeScreen = React.memo(() => {
             case 'banner1':
               return <Banner01 />;
 
-            case 'tabs':
-              return (
-                <View style={styles.tabScrollWrapper}>
-                  <FlatList
-                    horizontal
-                    ref={tabFlatListRef}
-                    data={tabLabels}
-                    renderItem={({ item }) => renderTab(item)}
-                    keyExtractor={(item) => item}
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.tabListContent}
-                    getItemLayout={(data, index) => ({
-                      length: 90,
-                      offset: 90 * index,
-                      index,
-                    })}
-                    scrollToIndexFailed={({ index }) => {
-                      setTimeout(() => {
-                        tabFlatListRef.current?.scrollToIndex({ index, animated: true });
-                      }, 200);
-                    }}
-                  />
-                </View>
-              );
+            // case 'tabs':
+            //   return (
+            //     <View style={styles.tabScrollWrapper}>
+            //       <FlatList
+            //         horizontal
+            //         ref={tabFlatListRef}
+            //         data={tabLabels}
+            //         renderItem={({ item }) => renderTab(item)}
+            //         keyExtractor={(item) => item}
+            //         showsHorizontalScrollIndicator={false}
+            //         contentContainerStyle={styles.tabListContent}
+            //         getItemLayout={(data, index) => ({
+            //           length: 90,
+            //           offset: 90 * index,
+            //           index,
+            //         })}
+            //         scrollToIndexFailed={({ index }) => {
+            //           setTimeout(() => {
+            //             tabFlatListRef.current?.scrollToIndex({ index, animated: true });
+            //           }, 200);
+            //         }}
+            //       />
+            //     </View>
+            //   );
 
             case 'jobs':
               return (

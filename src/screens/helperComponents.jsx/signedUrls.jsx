@@ -42,6 +42,37 @@ export const getTimeDisplay = (timestampInSeconds) => {
     return new Date(timestampInSeconds * 1000).toLocaleDateString('en-GB');
 };
 
+export const getTimeDisplayHome = (timestampInSeconds) => {
+  const secondsAgo = Math.floor(Date.now() / 1000 - timestampInSeconds);
+
+  if (secondsAgo < 60) return `few sec ago`;
+
+  const minutesAgo = Math.floor(secondsAgo / 60);
+  if (minutesAgo < 60) return `${minutesAgo} mins ago`;
+
+  const hoursAgo = Math.floor(minutesAgo / 60);
+  if (hoursAgo < 24) return `${hoursAgo} hours ago`;
+
+  const daysAgo = Math.floor(hoursAgo / 24);
+  return `${daysAgo} day${daysAgo > 1 ? 's' : ''} ago`;
+};
+
+export const getTimeDisplayForum = (timestampInSeconds) => {
+  const secondsAgo = Math.floor(Date.now() / 1000 - timestampInSeconds);
+
+  if (secondsAgo < 60) return `few sec ago`;
+  const minutesAgo = Math.floor(secondsAgo / 60);
+  if (minutesAgo < 60) return `${minutesAgo} mins ago`;
+  const hoursAgo = Math.floor(minutesAgo / 60);
+  if (hoursAgo < 24) return `${hoursAgo} hours ago`;
+
+  const date = new Date(timestampInSeconds * 1000);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are 0-based
+  const year = date.getFullYear();
+
+  return `${day}-${month}-${year}`;
+};
 
 
 const escapeRegExp = (string) => {

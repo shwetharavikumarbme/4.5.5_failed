@@ -176,8 +176,9 @@ const useFetchData = ({ shouldFetch = false }) => {
     setIsFetchingLatestPosts(true);
   
     try {
-      const response = await apiClient.post('/getLatestPosts', {
-        command: "getLatestPosts",
+      const response = await apiClient.post('/getAllAdminForumPosts', {
+        command: "getAllAdminForumPosts",
+        Type:'Trending',
         limit: 10,
       });
   

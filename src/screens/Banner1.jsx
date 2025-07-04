@@ -143,7 +143,6 @@ const styles = StyleSheet.create({
   carouselContainer: {
     flex: 1,
     overflow: 'hidden',
-    marginBottom: 10
   },
 
   bottomBar: {

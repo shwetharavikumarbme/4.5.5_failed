@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, useWindowDimensions } from 'react-native';
 import RenderHTML, { defaultHTMLElementModels } from 'react-native-render-html';
 import { decode } from 'html-entities';
@@ -14,7 +14,8 @@ const stripInlineStyles = (domNode) => {
         return (
           lower.startsWith('font-weight') ||
           lower.startsWith('font-style') ||
-          lower.startsWith('text-align')
+          lower.startsWith('text-align') ||
+          lower.startsWith('color')
         );
       })
       .join('; ');
@@ -31,32 +32,33 @@ const baseStyle = { fontSize: 14 };
 const defaultTextProps = {
   selectable: true,
   style: {
-    fontSize: 14,
+    fontSize: 13,
     lineHeight: 21,
     marginTop: 0,
     marginBottom: 0,
+    fontWeight: '400',
   },
 };
 
 const tagStyles = {
-  p: { marginTop: 0, marginBottom: 10, lineHeight: 21 },
-  div: { marginTop: 0, marginBottom: 10, lineHeight: 21 },
+  p: { marginTop: 0, marginBottom: 5 },
+  'li > p': { marginTop: 0, marginBottom: 0 },
+  div: { marginTop: 0, marginBottom: 0 },
   br: { marginBottom: 10 },
   ul: { marginTop: 0, marginBottom: 0 },
   ol: { marginTop: 0, marginBottom: 0 },
   li: { marginTop: 0, marginBottom: 0 },
   span: { marginTop: 0, marginBottom: 0 },
-  h1: { marginTop: 10, marginBottom: 10 },
-  h2: { marginTop: 10, marginBottom: 10 },
-  h3: { marginTop: 10, marginBottom: 10 },
-  h4: { marginTop: 10, marginBottom: 10 },
-  h5: { marginTop: 10, marginBottom: 10 },
-  h6: { marginTop: 10, marginBottom: 10 },
+  h1: { marginTop: 0, marginBottom: 0 },
+  h2: { marginTop: 0, marginBottom: 0 },
+  h3: { marginTop: 0, marginBottom: 0 },
+  h4: { marginTop: 0, marginBottom: 0 },
+  h5: { marginTop: 0, marginBottom: 0 },
+  h6: { marginTop: 0, marginBottom: 0 },
 };
 
 // ========== RenderHTML Wrapper (memoized) ==========
 const RenderHtmlRenderer = React.memo(({ sourceHtml, width }) => {
-  const domVisitors = useMemo(() => ({ onElement: stripInlineStyles }), []);
   const memoSource = useMemo(() => ({ html: sourceHtml }), [sourceHtml]);
 
   return (
@@ -68,19 +70,23 @@ const RenderHtmlRenderer = React.memo(({ sourceHtml, width }) => {
       baseStyle={baseStyle}
       tagsStyles={tagStyles}
       defaultTextProps={defaultTextProps}
-      domVisitors={domVisitors}
       ignoredDomTags={['font']}
       customHTMLElementModels={defaultHTMLElementModels}
+      domVisitors={{
+        onElement: (domNode) => {
+          stripInlineStyles(domNode);
+        },
+      }}
     />
   );
 });
 
 // ========== ForumBody Component ==========
-export const ForumBody = ({ html = '', forumId, isExpanded, toggleFullText }) => {
+export const ForumBody = ({ html = '' }) => {
   const { width } = useWindowDimensions();
   const MAX_CHARS = 200;
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  // Generate plain text from HTML
   const plainText = useMemo(() => {
     const stripped = html
       ?.replace(/<\/(p|div|br|h[1-6]|li)>/gi, ' ')
@@ -93,37 +99,25 @@ export const ForumBody = ({ html = '', forumId, isExpanded, toggleFullText }) =>
   const collapsedHtml = useMemo(() => {
     if (!showReadMore || isExpanded) return html;
     const trimmed = plainText.slice(0, MAX_CHARS).trimEnd();
-    // Ellipsis + Read more on same line
-    return `<p>${trimmed}... <span style="color: #075cab;">Read more</span></p>`;
+    return `<p>${trimmed}... <span style="color: #999">Read more</span></p>`;
   }, [html, plainText, isExpanded, showReadMore]);
 
-  const handleToggle = () => {
-    if (typeof toggleFullText === 'function') {
-      toggleFullText(forumId);
-    }
+  const handleExpand = () => {
+    if (!isExpanded) setIsExpanded(true);
   };
 
   return (
     <TouchableOpacity
-      onPress={showReadMore ? handleToggle : undefined}
-      activeOpacity={showReadMore ? 0.9 : 1}
+      onPress={showReadMore && !isExpanded ? handleExpand : undefined}
+      activeOpacity={showReadMore && !isExpanded ? 0.9 : 1}
       style={{ marginTop: 5 }}
     >
       <View>
         <RenderHtmlRenderer sourceHtml={collapsedHtml} width={width} />
       </View>
-
-      {/* Show "Read less" only when expanded */}
-      {showReadMore && isExpanded && (
-        <Text style={{ color: '#075cab', fontSize: 13, marginTop: 4 }}>
-          Read less
-        </Text>
-      )}
     </TouchableOpacity>
   );
 };
-
-
 
 
 export const ForumPostBody = ({ html, forumId, numberOfLines }) => {
@@ -145,7 +139,7 @@ export const ForumPostBody = ({ html, forumId, numberOfLines }) => {
         style={{
           fontSize: 14,
           color: '#444',
-          fontWeight: '400',
+          fontWeight: '600',
           lineHeight: 21,
         }}
       >
@@ -239,7 +233,13 @@ export const generateHighlightedHTML = (rawHtml = '', query = '') => {
   const regex = new RegExp(`(${safeQuery})`, 'gi');
 
   let html = normalizeHtml(rawHtml);
-  return html.replace(regex, (match) =>
-    `<span style="background-color: #fff9c4;  border-radius: 4px; padding: 0 2px;">${match}</span>`
-  );
+
+  // Split by tags to avoid replacing inside HTML tags
+  return html.replace(/(<[^>]+>)|([^<]+)/g, (match, tag, text) => {
+    if (tag) return tag; // keep tags unchanged
+    return text.replace(regex, (match) =>
+      `<span style="background-color: #fff9c4; border-radius: 4px; padding: 0 2px;">${match}</span>`
+    );
+  });
 };
+

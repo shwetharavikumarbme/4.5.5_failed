@@ -245,4 +245,3 @@ export const selectVideo = async ({
     showToast("Something went wrong", "error");
   }
 };
-

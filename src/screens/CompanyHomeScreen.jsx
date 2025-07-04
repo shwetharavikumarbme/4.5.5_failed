@@ -16,7 +16,7 @@ import apiClient from './ApiClient';
 import useFetchData from './helperComponents.jsx/HomeScreenData';
 import { useNetwork } from './AppUtils/IdProvider';
 import { useConnection } from './AppUtils/ConnectionProvider';
-import { getSignedUrl } from './helperComponents.jsx/signedUrls';
+import { getSignedUrl, getTimeDisplayForum, getTimeDisplayHome } from './helperComponents.jsx/signedUrls';
 import { styles } from '../assets/AppStyles';
 import { ForumPostBody } from './Forum/forumBody';
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
@@ -62,10 +62,10 @@ const CompanyHomeScreen = React.memo(() => {
 
   const sectionThresholds = {
     jobs: 234,
-    trendingPosts: 1594,
-    latestPosts: 4247,
-    products: 6692,
-    services: 8817,
+    trendingPosts: 1589.6666666666667,
+    latestPosts: 3804.3333333333335,
+    products: 5815,
+    services: 7511.333333333333,
   };
 
 
@@ -75,7 +75,7 @@ const CompanyHomeScreen = React.memo(() => {
       useNativeDriver: true,
       listener: (event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
-        console.log('offsetY', offsetY);
+        console.log(offsetY)
 
         const entries = Object.entries(sectionThresholds);
         for (let i = entries.length - 1; i >= 0; i--) {
@@ -127,11 +127,11 @@ const CompanyHomeScreen = React.memo(() => {
   };
 
   const renderJobCard = ({ item }) => {
-
     if (!item || item.isEmpty) return null;
 
-    const { post_id, job_title, experience_required, Package } = item;
-    const imageUrl = jobImageUrls?.[item.post_id]
+    const { post_id, job_title, experience_required, Package, job_post_created_on } = item;
+    const imageUrl = jobImageUrls?.[item.post_id];
+
     return (
       <TouchableOpacity
         onPress={() => navigation.navigate("JobDetail", { post_id, imageUrl })}
@@ -153,75 +153,97 @@ const CompanyHomeScreen = React.memo(() => {
             <Text style={styles.label}>Experience: </Text>
             {experience_required?.slice(0, 15) || "N/A"}
           </Text>
+
           <Text style={styles.eduSubText}>
             <Text style={styles.label}>Package: </Text>
             {Package || 'Not disclosed'}
           </Text>
+
+          <Text style={styles.eduSubText}>
+            <Text style={styles.label}>Posted: </Text>
+            {getTimeDisplayHome(job_post_created_on) || 'Not disclosed'}
+          </Text>
+
         </View>
       </TouchableOpacity>
     );
   };
 
-
   const renderForumCard = ({ item }) => {
+    if (!item || !item.forum_id) return null;
+    const AuthorImageUrl = authorImageUrls?.[item.forum_id]
 
     const rawHtml = (item.forum_body || '').trim();
     const hasHtmlTags = /<\/?[a-z][\s\S]*>/i.test(rawHtml);
     const forumBodyHtml = hasHtmlTags ? rawHtml : `<p>${rawHtml}</p>`;
 
-    if (!item || !item.forum_id) return null;
-
     const imageUrl = trendingImageUrls?.[item.forum_id] || latestImageUrls?.[item.forum_id];
     const isVideo = item.fileKey?.endsWith('.mp4');
-    const isImage = /\.(jpg|jpeg|png|gif|bmp|svg|webp|tiff)$/i.test(item.fileKey || '');
-
-    const formattedPostedTime = new Date(item.posted_on * 1000).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
 
     return (
       <TouchableOpacity
-        style={styles.heroCard}
         activeOpacity={0.9}
+        style={styles.articleCard}
         onPress={() => navigation.navigate("Comment", { forum_id: item.forum_id })}
       >
-        {isVideo ? (
-          <Video
-            source={{ uri: imageUrl }}
-            style={styles.heroImage}
-            resizeMode="cover"
-            muted
-            paused
-          />
-        ) : (
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.heroImage}
-            resizeMode="cover"
-          />
-        )}
-        <View style={styles.overlay}>
-          <View style={styles.overlayHeader}>
-            <Text numberOfLines={1} style={styles.metaLine}>
-              <Text style={styles.metaLabel}>Author: </Text>
-              <Text style={styles.metaValue}>{item.author || 'Unknown'}</Text>
-            </Text>
+        <View style={styles.articleCardHeader}>
+          {/* Vertical stack for badge, image, name */}
+          <View >
 
-            <Text style={styles.metaDate}>{formattedPostedTime}</Text>
+            <View style={[styles.authorRow]}>
+              <Image
+                source={{ uri: AuthorImageUrl }}
+                style={styles.authorImage}
+                resizeMode="cover"
+              />
+
+              <View style={styles.authorInfo}>
+                <Text style={styles.authorName}>{item.author || 'No Name'}</Text>
+
+                <Text style={styles.badgeText}>{item.author_category || ''}</Text>
+
+              </View>
+            </View>
+            <View >
+            <Text style={styles.PostedLabel}>Posted on: <Text style={styles.articleTime}>{getTimeDisplayForum(item.posted_on)}</Text></Text>
+
+          
+            </View>
+
           </View>
 
-          <ForumPostBody
-            html={forumBodyHtml}
-            forumId={item?.forum_id}
-            numberOfLines={2}
 
-          />
+
+          {/* Post image or video if available */}
+          {imageUrl && (
+            isVideo ? (
+              <Video
+                source={{ uri: imageUrl }}
+                style={styles.articleMedia}
+                resizeMode="cover"
+                muted
+                paused
+              />
+            ) : (
+              <Image
+                source={{ uri: imageUrl }}
+                style={styles.articleMedia}
+                resizeMode="cover"
+              />
+            )
+          )}
 
         </View>
 
+
+        <ForumPostBody
+          html={item.forum_body}
+          forumId={item?.forum_id}
+          numberOfLines={4}
+          textStyle={styles.articleExcerpt}
+        />
       </TouchableOpacity>
+
     );
   };
 
@@ -246,25 +268,34 @@ const CompanyHomeScreen = React.memo(() => {
         </View>
 
         <View style={styles.cardContent4}>
-          <Text numberOfLines={1} style={styles.eduTitle}>
-            {item.title || ' '}
+          <View style={styles.cardTitleRow}>
+            <Text numberOfLines={1} style={styles.eduTitle}>{item.title || ' '}</Text>
+          </View>
+
+          <Text numberOfLines={1} style={styles.modelText}>
+            {/* <Text style={styles.label}>Model name: </Text> */}
+            <Icon name="tag-outline" size={16} color='#666' /> {item.specifications.model_name || ' '}
           </Text>
 
-          <Text style={styles.eduSubText}>
-            <Text style={styles.label}>model_name: </Text>
-            {item.specifications.model_name || ' '}
+          <Text style={styles.descriptionText} numberOfLines={1}>
+            {/* <Text style={styles.label}>Description: </Text> */}
+            <Icon name="text-box-outline" size={16} color='#666' /> {item.description || ' '}
           </Text>
 
-          <Text numberOfLines={4} style={styles.eduSubText}>
-            <Text style={styles.label}>description: </Text>
-            ₹{item.description || ' '}
-          </Text>
+          <Text numberOfLines={1} style={styles.companyNameText}>
+            {/* <Text style={styles.label}>Company name: </Text> */}
+            <Icon name="office-building-outline" size={16} color='#666' /> {item.company_name || ' '}</Text>
 
-          <Text style={styles.eduSubText}>
-            <Text style={styles.label}>company_name: </Text>
-            {item.company_name || ' '}
-          </Text>
+          {(item.price ?? '').toString().trim() !== '' ? (
+            <View style={styles.priceRow}>
+              <Text numberOfLines={1} style={styles.price}><Icon name="currency-inr" size={16} color='#666' />
+              {item.price}</Text>
+            </View>
+          ) : (
+            <Text style={styles.eduSubText}>₹ Not specified</Text>
+          )}
         </View>
+
       </TouchableOpacity>
     );
   };
@@ -291,27 +322,24 @@ const CompanyHomeScreen = React.memo(() => {
         </View>
 
         <View style={styles.cardContent4}>
-          <Text numberOfLines={1} style={styles.eduTitle}>
-            {item.title || ' '}
+          <View style={styles.cardTitleRow}>
+            <Text numberOfLines={1} style={styles.eduTitle}>{item.title || ' '}</Text>
+          </View>
+
+          <Text style={styles.descriptionText} numberOfLines={1}>
+            {/* <Text style={styles.label}>Description: </Text> */}
+            <Icon name="text-box-outline" size={16} color='#666' /> {item.description || ' '}
           </Text>
 
-          <Text style={styles.eduSubText}>
-            <Text style={styles.label}>model_name: </Text>
-            {item.specifications.model_name || ' '}
+          <Text numberOfLines={1}  style={styles.companyNameText}>
+            {/* <Text style={styles.label}>Company name: </Text> */}
+            <Icon name="office-building-outline" size={16} color='#666' /> {item.company_name || ' '}
           </Text>
 
-          <Text numberOfLines={4} style={styles.eduSubText}>
-            <Text style={styles.label}>description: </Text>
-            {item.description || ' '}
-          </Text>
-
-          <Text style={styles.eduSubText}>
-            <Text style={styles.label}>company_name: </Text>
-            {item.company_name || ' '}
-          </Text>
           {(item.price ?? '').toString().trim() !== '' ? (
             <View style={styles.priceRow}>
-              <Text numberOfLines={1} style={styles.price}>₹ {item.price}</Text>
+              <Text numberOfLines={1} style={styles.price}><Icon name="currency-inr" size={16} color='#666' />
+              {item.price} </Text>
             </View>
           ) : (
             <Text style={styles.eduSubText}>₹ Not specified</Text>
@@ -321,7 +349,6 @@ const CompanyHomeScreen = React.memo(() => {
       </TouchableOpacity>
     );
   };
-
 
 
   const {
@@ -340,9 +367,11 @@ const CompanyHomeScreen = React.memo(() => {
     trendingImageUrls,
     productImageUrls,
     servicesImageUrls,
+    authorImageUrls,
     refreshData,
 
   } = useFetchData({ shouldFetch: isProfileFetched });
+
 
 
   useEffect(() => {
@@ -541,13 +570,13 @@ const CompanyHomeScreen = React.memo(() => {
         ref={flatListRef}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        stickyHeaderIndices={[1]}
+        // stickyHeaderIndices={[1]}
         onScrollBeginDrag={() => Keyboard.dismiss()}
         contentContainerStyle={{ paddingBottom: '20%', backgroundColor: 'whitesmoke' }}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
         data={[
           { type: 'banner1' },
-          { type: 'tabs' }, // 👈 This is now sticky!
+          // { type: 'tabs' }, 
           { type: 'jobs', data: jobs },
           { type: 'banner2' },
           { type: 'trendingPosts', data: trendingPosts },
@@ -558,37 +587,36 @@ const CompanyHomeScreen = React.memo(() => {
         ]}
 
 
-
         renderItem={({ item }) => {
           switch (item.type) {
 
             case 'banner1':
               return <Banner01 />;
 
-            case 'tabs':
-              return (
-                <View style={styles.tabScrollWrapper}>
-                  <FlatList
-                    horizontal
-                    ref={tabFlatListRef}
-                    data={tabLabels}
-                    renderItem={({ item }) => renderTab(item)}
-                    keyExtractor={(item) => item}
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.tabListContent}
-                    getItemLayout={(data, index) => ({
-                      length: 90,
-                      offset: 90 * index,
-                      index,
-                    })}
-                    scrollToIndexFailed={({ index }) => {
-                      setTimeout(() => {
-                        tabFlatListRef.current?.scrollToIndex({ index, animated: true });
-                      }, 200);
-                    }}
-                  />
-                </View>
-              );
+            // case 'tabs':
+            //   return (
+            //     <View style={styles.tabScrollWrapper}>
+            //       <FlatList
+            //         horizontal
+            //         ref={tabFlatListRef}
+            //         data={tabLabels}
+            //         renderItem={({ item }) => renderTab(item)}
+            //         keyExtractor={(item) => item}
+            //         showsHorizontalScrollIndicator={false}
+            //         contentContainerStyle={styles.tabListContent}
+            //         getItemLayout={(data, index) => ({
+            //           length: 90,
+            //           offset: 90 * index,
+            //           index,
+            //         })}
+            //         scrollToIndexFailed={({ index }) => {
+            //           setTimeout(() => {
+            //             tabFlatListRef.current?.scrollToIndex({ index, animated: true });
+            //           }, 200);
+            //         }}
+            //       />
+            //     </View>
+            //   );
 
             case 'jobs':
               return (

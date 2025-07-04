@@ -62,7 +62,6 @@ const App = () => {
   // useReviewPrompt();
 
 
-
   useEffect(() => {
     const getData = async () => {
       try {

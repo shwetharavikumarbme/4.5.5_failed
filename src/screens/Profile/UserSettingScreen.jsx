@@ -196,19 +196,19 @@ const UserSettingScreen = () => {
   );
 
   const collapsedTranslateY = scrollOffsetY.interpolate({
-    inputRange: [168, 250],
+    inputRange: [216, 253],
     outputRange: [-60, 0], // Moves down into view
     extrapolate: 'clamp',
   });
 
   const collapsedOpacity = scrollOffsetY.interpolate({
-    inputRange: [168, 250],
+    inputRange: [216, 253],
     outputRange: [0, 1], // Fades in
     extrapolate: 'clamp',
   });
 
   const fullProfileOpacity = scrollOffsetY.interpolate({
-    inputRange: [168, 250],
+    inputRange: [216, 253],
     outputRange: [1, 0], // Fades out
     extrapolate: 'clamp',
   });
@@ -259,7 +259,7 @@ const UserSettingScreen = () => {
 
 
 
-      <Animated.ScrollView contentContainerStyle={[styles.container, { paddingBottom: '31%', }]}
+      <Animated.ScrollView contentContainerStyle={[styles.container, { paddingBottom: '44%', }]}
         showsVerticalScrollIndicator={false} onScroll={handleScroll} >
 
         {isConnected ? (

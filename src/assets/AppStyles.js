@@ -64,6 +64,46 @@ export default AppStyle = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'whitesmoke',
   },
+  headerContainerForum: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'white',
+  },
+  searchContainerForum: {
+    flex: 1,
+    flexDirection: 'row',
+    alignSelf: 'center',
+    padding: 10,
+    borderRadius: 10,
+
+  },
+  inputContainerForum: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
+  searchInputForum: {
+    flex: 1,
+    fontSize: 14,
+    backgroundColor: "white",
+    paddingHorizontal: 15,
+    borderRadius: 10,
+    height: 30,
+  },
+  searchIconButtonForum: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+
+  },
+  iconButtonForum: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+
+
+  },
   searchContainer: {
     flex: 1,
     flexDirection: 'row',
@@ -195,7 +235,7 @@ export const styles = StyleSheet.create({
     backgroundColor: '#fff',
     marginHorizontal: 6,
     marginBottom: 10,
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 0.5,
     borderColor: '#ddd',
@@ -219,7 +259,8 @@ export const styles = StyleSheet.create({
 
   eduCardRight: {
     flex: 1,
-    padding: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     justifyContent: 'center',
   },
 
@@ -234,7 +275,6 @@ export const styles = StyleSheet.create({
     fontSize: 13,
     color: '#555',
     marginTop: 4,
-    lineHeight: 18,
   },
 
   label: {
@@ -287,10 +327,6 @@ export const styles = StyleSheet.create({
     color: 'black',
   },
 
-  label: {
-    fontWeight: '600',
-    color: '#333',
-  },
 
   flatListContainer: {
     paddingBottom: '20%',
@@ -577,6 +613,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 10,
+
   },
   authorSection: {
     alignItems: 'center',
@@ -595,8 +632,8 @@ export const styles = StyleSheet.create({
 
   },
   authorImage: {
-    width: 50,
-    height: 50,
+    width: 30,
+    height: 30,
     borderRadius: 25,
     backgroundColor:'#ddd',
     marginHorizontal:12
@@ -617,13 +654,15 @@ export const styles = StyleSheet.create({
   articleTime: {
     fontSize: 12,
     color: '#666',
-    paddingHorizontal:10
   },
   articleExcerpt: {
     marginTop: 6,
     fontSize: 14,
     color: '#333',
   },
+  PostedLabel:{
+    paddingHorizontal:10
 
+  },
 
 });

@@ -116,7 +116,7 @@ const UserDrawerNav = () => {
 
           }}
         />
-         <Drawer.Screen
+         {/* <Drawer.Screen
             name="Trending"
             component={TrendingDrawer}
             options={{
@@ -124,7 +124,7 @@ const UserDrawerNav = () => {
               unmountOnBlur: true,
 
             }}
-          />
+          /> */}
         <Drawer.Screen
           name="Companies"
           component={UserCompanyListNav}

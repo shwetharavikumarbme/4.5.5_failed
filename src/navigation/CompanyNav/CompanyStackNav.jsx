@@ -62,7 +62,7 @@ import CreateService from '../../screens/Services/ServiceUploads';
 import MyServices from '../../screens/Services/MyServices';
 import CompanyGetallEnquiries from '../../screens/Services/EnqueriesReceived';
 import RelatedServicesDetails from '../../screens/Services/RelatedServicesDetails';
-import EnquiryForm from '../../screens/Services/Enquery';
+import EnquiryForm from '../../screens/Services/Enquiry';
 import MyEnqueries from '../../screens/Services/MyEnqueries';
 import EnquiryDetails from '../../screens/Services/EnquiryDetails';
 import InPrivacyPolicy from '../../screens/Bme_content/InPrivacyPolicy';
