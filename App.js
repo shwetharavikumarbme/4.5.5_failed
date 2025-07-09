@@ -31,6 +31,7 @@ import MediaViewer from './src/screens/helperComponents.jsx/mediaViewer';
 import useLastActivityTracker from './src/screens/AppUtils/LastSeenProvider';
 import InAppReview from 'react-native-in-app-review';
 import useReviewPrompt from './src/screens/AppUtils/appReview';
+import { cleanupQuickActions, handleNavigationReady, onNavigationContainerReady, setupQuickActions, setupQuickActionsInternal } from './src/screens/quickActions';
 
 
 
@@ -61,6 +62,7 @@ const App = () => {
   // useLastActivityTracker();
   // useReviewPrompt();
 
+  const [isNavigationReady, setIsNavigationReady] = useState(false);
 
   useEffect(() => {
     const getData = async () => {
@@ -518,6 +520,10 @@ const App = () => {
     checkAndClearCache();
   }, []);
 
+  useEffect(() => {
+    setupQuickActions();
+  }, []);
+
 
   const checkAuthStatus = async () => {
     setIsLoading(true);
@@ -546,6 +552,14 @@ const App = () => {
   };
 
   useEffect(() => {
+    setupQuickActions();
+
+    return () => {
+      cleanupQuickActions();
+    };
+  }, []);
+
+  useEffect(() => {
     const initializeApp = async () => {
       await checkAuthStatus();
       setSplashVisible(false); // Hide splash screen after loading is complete
@@ -568,6 +582,7 @@ const App = () => {
 
 
 
+
   return (
     <SafeAreaProvider>
       <Provider store={store}>
@@ -575,7 +590,13 @@ const App = () => {
           <GestureHandlerRootView style={styles.container}>
             <ToastProvider>
 
-              <NavigationContainer ref={navigationRef}>
+              <NavigationContainer ref={navigationRef}
+                onReady={() => {
+                  console.log('NavigationContainer onReady called');
+                  onNavigationContainerReady();
+                }}
+
+              >
 
                 <ConnectionProvider>
                   <BottomSheetProvider>

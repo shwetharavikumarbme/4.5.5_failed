@@ -387,6 +387,8 @@ const ProductsList = () => {
             const res = await withTimeout(apiClient.post('/searchProducts', requestData), 10000);
             const products = res?.data?.response || [];
 
+            flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+            
             setSearchResults(products);
             setLastEvaluatedKey(null);
             fetchProductImageUrls(products);

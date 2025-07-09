@@ -518,6 +518,12 @@ const UserProfileScreen = () => {
 
    
         </View>
+        <GamificationSection
+    onComplete={(score, badgeUnlocked) => {
+      // Optional: Handle quiz completion
+      console.log(`Quiz completed with ${score} points`, badgeUnlocked);
+    }}
+  />
 
       </ScrollView >
    

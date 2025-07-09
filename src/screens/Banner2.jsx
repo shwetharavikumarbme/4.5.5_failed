@@ -144,10 +144,11 @@ const Banner02 = () => {
                     source={{ uri: file.url }}
                     style={styles.video}
                     resizeMode="cover"
-                    muted={false}
-                    volume={1.0}
+                    muted={true}
+                    // volume={1.0}
                     ignoreSilentSwitch="ignore"
-                    paused={!isPlaying[index] || currentIndex !== index || !isFocused}
+                    // paused={!isPlaying[index] || currentIndex !== index || !isFocused}
+                    repeat
                     onEnd={() => {
                       setIsPlaying((prevState) => ({
                         ...prevState,
@@ -157,7 +158,7 @@ const Banner02 = () => {
                       startAutoSlide();
                     }}
                   />
-                  <TouchableOpacity
+                  {/* <TouchableOpacity
                     style={styles.playButton}
                     onPress={() => togglePlayPause(index)}>
                     <Icon
@@ -166,7 +167,7 @@ const Banner02 = () => {
                       color="white"
                       style={{ opacity: isPlaying[index] ? 0 : 0.7 }}
                     />
-                  </TouchableOpacity>
+                  </TouchableOpacity> */}
                 </>
               ) : (
                 <FastImage

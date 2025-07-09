@@ -79,7 +79,7 @@ const UserHomeScreen = React.memo(() => {
       useNativeDriver: true,
       listener: (event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
-console.log(offsetY)
+
         const entries = Object.entries(sectionThresholds);
         for (let i = entries.length - 1; i >= 0; i--) {
           const [section, threshold] = entries[i];

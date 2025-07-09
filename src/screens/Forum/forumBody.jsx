@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, useWindowDimensions } from 'react-native';
 import RenderHTML, { defaultHTMLElementModels } from 'react-native-render-html';
 import { decode } from 'html-entities';
+import truncate from 'html-truncate'; 
 
 // ========== Clean inline styles ==========
 const stripInlineStyles = (domNode) => {
@@ -27,16 +28,17 @@ const stripInlineStyles = (domNode) => {
 };
 
 // ========== Shared styling ==========
-const baseStyle = { fontSize: 14 };
+const baseStyle = { fontSize: 13 };
 
 const defaultTextProps = {
   selectable: true,
   style: {
     fontSize: 13,
-    lineHeight: 21,
     marginTop: 0,
     marginBottom: 0,
-    fontWeight: '400',
+    // fontWeight: '400',
+    // lineHeight: 20,
+
   },
 };
 
@@ -55,6 +57,9 @@ const tagStyles = {
   h4: { marginTop: 0, marginBottom: 0 },
   h5: { marginTop: 0, marginBottom: 0 },
   h6: { marginTop: 0, marginBottom: 0 },
+  b: { fontWeight: 'bold' },
+  strong: { fontWeight: 'bold' },
+
 };
 
 // ========== RenderHTML Wrapper (memoized) ==========
@@ -98,9 +103,14 @@ export const ForumBody = ({ html = '' }) => {
 
   const collapsedHtml = useMemo(() => {
     if (!showReadMore || isExpanded) return html;
-    const trimmed = plainText.slice(0, MAX_CHARS).trimEnd();
-    return `<p>${trimmed}... <span style="color: #999">Read more</span></p>`;
-  }, [html, plainText, isExpanded, showReadMore]);
+  
+    const truncated = truncate(html, MAX_CHARS, {
+      ellipsis: '... <span style="color: #999">Read more</span>',
+    });
+  
+    return `<p>${truncated}</p>`;
+  }, [html, isExpanded, showReadMore]);
+  
 
   const handleExpand = () => {
     if (!isExpanded) setIsExpanded(true);
@@ -138,9 +148,9 @@ export const ForumPostBody = ({ html, forumId, numberOfLines }) => {
         } : {})}
         style={{
           fontSize: 14,
-          color: '#444',
+          color: '#333',
           fontWeight: '600',
-          lineHeight: 21,
+          lineHeight: 20,
         }}
       >
         {plainText}
@@ -170,7 +180,7 @@ export const MyPostBody = ({ html, forumId, numberOfLines }) => {
           fontSize: 14,
           color: '#000',
           fontWeight: '400',
-          lineHeight: 21,
+          // lineHeight: 20,
         }}
       >
         {plainText}
@@ -186,21 +196,30 @@ export const cleanForumHtml = (html) => {
   html = cleanTooltips(html);
 
   return html
+    // Remove color and background-color inline styles but keep others
     .replace(/style="[^"]*(color|background-color):[^";]*;?[^"]*"/gi, (match) => {
       return match
         .replace(/(?:color|background-color):[^";]*;?/gi, '')
         .replace(/style="\s*"/gi, '');
     })
+    // Keep only allowed inline styles
     .replace(/style="([^"]*)"/gi, (match, styleContent) => {
       const allowed = styleContent
         .split(';')
         .map(s => s.trim())
-        .filter(s => s.startsWith('font-weight') || s.startsWith('font-style') || s.startsWith('text-align'));
+        .filter(s =>
+          s.startsWith('font-weight') ||
+          s.startsWith('font-style') ||
+          s.startsWith('text-align')
+        );
       return allowed.length ? `style="${allowed.join('; ')}"` : '';
     })
+    // Remove empty style=""
     .replace(/\sstyle="\s*"/gi, '')
+    // Sanitize anchor tags
     .replace(/<a [^>]*href="([^"]+)"[^>]*>/gi, '<a href="$1">')
-    .replace(/<[^\/>][^>]*>\s*<\/[^>]+>/gi, '');
+    // DO NOT remove empty b/strong/i/em/u/span tags
+    // Old line (removed): .replace(/<[^\/>][^>]*>\s*<\/[^>]+>/gi, '')
 };
 
 export const cleanTooltips = (html) => {
@@ -212,19 +231,37 @@ export const cleanTooltips = (html) => {
     .replace(/Tooltip:?\s+[^<\n]+/gi, '');
 };
 
-export const normalizeHtml = (input = '') => {
+export const normalizeHtml = (input = '', query = '') => {
   if (!input?.trim()) return '';
 
-  const isHtml = /<\/?[a-z][\s\S]*>/i.test(input);
-  return isHtml
-    ? decode(input)
-    : `<p>${decode(input)
-        .trim()
-        .split(/\n+/)
-        .map(line => line.trim())
-        .filter(Boolean)
-        .join('</p><p>')}</p>`;
+  const decoded = decode(input);
+  const isHtml = /<\/?[a-z][\s\S]*>/i.test(decoded);
+
+  // Function to escape special regex characters in query
+  const escapeRegExp = str => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Highlighting logic
+  const highlightQuery = (text, q) => {
+    if (!q) return text;
+    console.log('highlightQuery', q)
+    const regex = new RegExp(escapeRegExp(q), 'gi');
+    return text.replace(regex, match => `<mark style="background-color: yellow">${match}</mark>`);
+  };
+
+  if (isHtml) {
+    return highlightQuery(decoded, query);
+  } else {
+    const htmlWrapped = decoded
+      .trim()
+      .split(/\n+/)
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => `<p>${highlightQuery(line, query)}</p>`)
+      .join('');
+    return htmlWrapped;
+  }
 };
+
 
 export const generateHighlightedHTML = (rawHtml = '', query = '') => {
   if (!query?.trim()) return normalizeHtml(rawHtml);

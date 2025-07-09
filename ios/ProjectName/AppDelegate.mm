@@ -7,6 +7,7 @@
 #import <React/RCTRootView.h>
 #import <React/RCTLinkingManager.h>
 #import <AVFoundation/AVFoundation.h>
+#import "RNShortcuts.h"
 
 @implementation AppDelegate
 
@@ -14,18 +15,21 @@
 {
   self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
 
-  // Setup audio session
+  // 1. Setup audio session
   NSError *audioSessionError = nil;
   [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback error:&audioSessionError];
   [[AVAudioSession sharedInstance] setActive:YES error:nil];
 
+  // 2. Configure Firebase
   if (![FIRApp defaultApp]) {
     [FIRApp configure];
   }
 
+  // 3. Firebase Messaging setup
   [FIRMessaging messaging].delegate = self;
   [[FIRMessaging messaging] setAutoInitEnabled:YES];
 
+  // 4. Notification setup
   if (@available(iOS 10, *)) {
     UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
     center.delegate = self;
@@ -45,6 +49,7 @@
     [application registerForRemoteNotifications];
   }
 
+  // 5. React Native root view setup
   RCTBridge *bridge = [[RCTBridge alloc] initWithDelegate:self launchOptions:launchOptions];
   RCTRootView *rootView = [[RCTRootView alloc] initWithBridge:bridge moduleName:@"ProjectName" initialProperties:nil];
   rootView.backgroundColor = [UIColor whiteColor];
@@ -54,8 +59,28 @@
   self.window.rootViewController = rootViewController;
   [self.window makeKeyAndVisible];
 
+  // 6. Quick Actions handling - Check if app was launched from quick action
+  UIApplicationShortcutItem *shortcutItem = [launchOptions objectForKey:UIApplicationLaunchOptionsShortcutItemKey];
+  if (shortcutItem) {
+    [RNShortcuts handleShortcutItem:shortcutItem];
+    return YES;
+  }
+
   return YES;
 }
+
+#pragma mark - Quick Actions Handling (Updated)
+
+- (void)application:(UIApplication *)application performActionForShortcutItem:(UIApplicationShortcutItem *)shortcutItem completionHandler:(void (^)(BOOL))completionHandler {
+  // Send to both RNShortcuts and post a notification for redundancy
+  [RNShortcuts handleShortcutItem:shortcutItem];
+  [[NSNotificationCenter defaultCenter] postNotificationName:@"QuickActionPressed"
+                                                    object:nil
+                                                  userInfo:shortcutItem.userInfo];
+  completionHandler(YES);
+}
+
+#pragma mark - Push Notifications (Existing)
 
 - (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken
 {
@@ -82,8 +107,9 @@
 - (void)messaging:(FIRMessaging *)messaging didReceiveRegistrationToken:(NSString *)fcmToken
 {
   NSLog(@"[FCM Token Updated]: %@", fcmToken);
-  // You can send this token to your backend if needed
 }
+
+#pragma mark - UNUserNotificationCenterDelegate (Existing)
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
        willPresentNotification:(UNNotification *)notification
@@ -99,6 +125,8 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   completionHandler();
 }
 
+#pragma mark - React Native Bundle Loading (Existing)
+
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge
 {
   return [self bundleURL];
@@ -112,6 +140,8 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   return [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];
 #endif
 }
+
+#pragma mark - Deep Linking (Existing)
 
 - (BOOL)application:(UIApplication *)application
 continueUserActivity:(NSUserActivity *)userActivity

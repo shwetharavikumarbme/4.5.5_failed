@@ -44,8 +44,8 @@ const UserSubscriptionScreen = () => {
     {
       name: 'Premium',
       day: '365',
-      price: '649',
-      amount: 649,
+      price: '2',
+      amount: 2,
       validity: '365',
       features: [true, true, true, true, true, true, true, true, true],
     },
@@ -438,20 +438,15 @@ const UserSubscriptionScreen = () => {
 
                   switch (modalType) {
                     case 'success':
-                      console.log('✅ Payment success — creating session and restarting app...');
-                      try {
-                        await createUserSession(userId);
-                        await handleLoginSuccess(userId);
-                      } catch (error) {
-                        console.error('❗ Error during login/session setup:', error);
-                      }
-                      // setTimeout(() => {
-                      //   RNRestart.Restart();
-                      // }, 500);
+                      console.log('✅ Payment success — restarting app...');
+                      setTimeout(() => {
+                        RNRestart.Restart();
+                      }, 500);
                       break;
 
                     case 'failure':
                       console.log('❌ Payment failed — modal closed (no retry triggered)');
+                      // No retry here intentionally — just closes modal
                       break;
 
                     default:

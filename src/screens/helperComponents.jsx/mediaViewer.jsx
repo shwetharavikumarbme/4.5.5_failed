@@ -8,7 +8,6 @@ import {
     TouchableOpacity,
     FlatList,
     ActivityIndicator,
-    SafeAreaView,
     Image
 } from 'react-native';
 import Video from 'react-native-video';
@@ -103,6 +102,8 @@ const MediaViewer = () => {
         return (
             <View style={styles.centeredMediaWrapper}>
                 <Video
+                    controls={false}
+                    hideShutterView={true}
                     ref={(ref) => {
                         if (ref) videoRefs.current[index] = ref;
                     }}
@@ -171,165 +172,125 @@ const MediaViewer = () => {
 
     return (
         <Modal visible={visible} transparent onRequestClose={handleClose}>
-            <SafeAreaView style={styles.safeArea}>
-                <View style={styles.modalContainer}>
-                    {/* TOP BAR */}
-                    <View style={styles.topBar}>
-                        <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-                            <Text style={styles.closeText}>✕</Text>
+            <View style={styles.modalContainer}>
+                {/* TOP BAR */}
+                <View style={styles.topBar}>
+                    <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+                        <Text style={styles.closeText}>✕</Text>
+                    </TouchableOpacity>
+                    {mediaArray?.[currentIndex]?.type === 'video' && (
+                        <TouchableOpacity onPress={() => setIsMuted(!isMuted)} style={styles.muteButton}>
+                            <Icon name={isMuted ? 'volume-off' : 'volume-up'} size={22} color="white" />
                         </TouchableOpacity>
-                        {mediaArray?.[currentIndex]?.type === 'video' && (
-                            <TouchableOpacity onPress={() => setIsMuted(!isMuted)} style={styles.muteButton}>
-                                <Icon name={isMuted ? 'volume-off' : 'volume-up'} size={22} color="white" />
-                            </TouchableOpacity>
-                        )}
-                    </View>
+                    )}
+                </View>
 
-                    {/* MAIN CONTENT */}
-                    <FlatList
-    ref={flatListRef}
-    data={mediaArray}
-    keyExtractor={(_, index) => index.toString()}
-    renderItem={renderItem}
-    horizontal
-    pagingEnabled
-    showsHorizontalScrollIndicator={false}
-    getItemLayout={(_, index) => ({
-        length: width,
-        offset: width * index,
-        index,
-    })}
-    onMomentumScrollEnd={e => {
-        const index = Math.round(e.nativeEvent.contentOffset.x / width);
-        setCurrentIndex(index);
-    }}
+                {/* MAIN CONTENT */}
+                <FlatList
+                    ref={flatListRef}
+                    data={mediaArray}
+                    keyExtractor={(_, index) => index.toString()}
+                    renderItem={renderItem}
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    getItemLayout={(_, index) => ({
+                        length: width,
+                        offset: width * index,
+                        index,
+                    })}
+                    onMomentumScrollEnd={e => {
+                        const index = Math.round(e.nativeEvent.contentOffset.x / width);
+                        setCurrentIndex(index);
+                    }}
+                />
 
-/>
+                {/* BOTTOM CONTROLS */}
+                <View style={styles.bottomBar}>
+                    {mediaArray?.[currentIndex]?.type === 'video' && (
+                        <>
+                            <View style={styles.progressBarWrapper}>
+                                <View
+                                    style={[
+                                        styles.progressBar,
+                                        {
+                                            width: videoDurations[currentIndex]
+                                                ? `${(currentTimes[currentIndex] / videoDurations[currentIndex]) * 100}%`
+                                                : '0%',
+                                        },
+                                    ]}
+                                />
+                            </View>
 
+                            <View style={styles.controlOverlay}>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        const currentTime = currentTimes[currentIndex] || 0;
+                                        videoRefs.current[currentIndex]?.seek(Math.max(0, currentTime - 10));
+                                    }}
+                                    style={styles.controlButton}
+                                >
+                                    <Icon name="replay-10" size={32} color="white" />
+                                </TouchableOpacity>
 
-
-                    {/* BOTTOM CONTROLS */}
-                    <View style={styles.bottomBar}>
-                        {mediaArray?.[currentIndex]?.type === 'video' && (
-                            <>
-                                <View style={styles.progressBarWrapper}>
-                                    <View
-                                        style={[
-                                            styles.progressBar,
-                                            {
-                                                width: videoDurations[currentIndex]
-                                                    ? `${(currentTimes[currentIndex] / videoDurations[currentIndex]) * 100}%`
-                                                    : '0%',
-                                            },
-                                        ]}
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        const videoRef = videoRefs.current[currentIndex];
+                                        if (videoRef) {
+                                            videoRef.props.paused 
+                                                ? videoRef.resume() 
+                                                : videoRef.pause();
+                                        }
+                                    }}
+                                    style={styles.controlButton}
+                                >
+                                    <Icon
+                                        name={videoRefs.current[currentIndex]?.props?.paused ? 'play-arrow' : 'pause'}
+                                        size={40}
+                                        color="white"
                                     />
-                                </View>
+                                </TouchableOpacity>
 
-                                <View style={styles.controlOverlay}>
-                                    <TouchableOpacity
-                                        onPress={() => {
-                                            const currentTime = currentTimes[currentIndex] || 0;
-                                            videoRefs.current[currentIndex]?.seek(Math.max(0, currentTime - 10));
-                                        }}
-                                        style={styles.controlButton}
-                                    >
-                                        <Icon name="replay-10" size={32} color="white" />
-                                    </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        const currentTime = currentTimes[currentIndex] || 0;
+                                        videoRefs.current[currentIndex]?.seek(currentTime + 10);
+                                    }}
+                                    style={styles.controlButton}
+                                >
+                                    <Icon name="forward-10" size={32} color="white" />
+                                </TouchableOpacity>
+                            </View>
+                        </>
+                    )}
 
-                                    <TouchableOpacity
-                                        onPress={() => {
-                                            setCurrentIndex(prev => (prev === currentIndex ? -1 : currentIndex));
-                                        }}
-                                        style={styles.controlButton}
-                                    >
-                                        <Icon
-                                            name={currentIndex === currentIndex ? 'pause' : 'play-arrow'}
-                                            size={40}
-                                            color="white"
-                                        />
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity
-                                        onPress={() => {
-                                            const currentTime = currentTimes[currentIndex] || 0;
-                                            videoRefs.current[currentIndex]?.seek(currentTime + 10);
-                                        }}
-                                        style={styles.controlButton}
-                                    >
-                                        <Icon name="forward-10" size={32} color="white" />
-                                    </TouchableOpacity>
-                                </View>
-                            </>
-                        )}
-
-                        {/* THUMBNAILS */}
-                        <View style={styles.thumbnailListWrapper}>
-                            <FlatList
-                                data={mediaArray}
-                                horizontal
-                                keyExtractor={(_, idx) => `thumb-${idx}`}
-                                renderItem={renderThumbnail}
-                                showsHorizontalScrollIndicator={false}
-                                contentContainerStyle={styles.thumbnailList}
-                            />
-                        </View>
+                    {/* THUMBNAILS */}
+                    <View style={styles.thumbnailListWrapper}>
+                        <FlatList
+                            data={mediaArray}
+                            horizontal
+                            keyExtractor={(_, idx) => `thumb-${idx}`}
+                            renderItem={renderThumbnail}
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.thumbnailList}
+                        />
                     </View>
                 </View>
-            </SafeAreaView>
+            </View>
         </Modal>
     );
 };
 
 export default MediaViewer;
 
-
 const styles = StyleSheet.create({
-    progressBarWrapper: {
-        height: 4,
-        backgroundColor: '#555',
-        borderRadius: 2,
-        overflow: 'hidden',
-        width: '90%',
-        alignSelf: 'center',
-        marginTop: 10,
-    },
-    safeArea: {
-        flex: 1,
-        backgroundColor: 'black',
-    },
-
-
-    progressBar: {
-        height: '100%',
-        backgroundColor: '#00aced',
-    },
-
-    controlOverlay: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        backgroundColor: 'rgba(0, 0, 0, 0.4)',
-        borderRadius: 8,
-        marginVertical: 10,
-    },
-
-
-
-    controlButton: {
-        padding: 10,
-    },
-
     modalContainer: {
         flex: 1,
         backgroundColor: 'black',
-        position: 'relative',
     },
-    
     topBar: {
         position: 'absolute',
-        top: 0,
+        top: 60,
         left: 0,
         right: 0,
         zIndex: 10,
@@ -338,30 +299,28 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 20,
         paddingTop: 20,
-        backgroundColor: 'rgba(0,0,0,0.4)',
-
+        // backgroundColor: 'rgba(0,0,0,0.4)',
     },
-    
     bottomBar: {
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
         zIndex: 10,
-        paddingBottom: 10,
+        paddingBottom: 20,
         paddingTop: 10,
         backgroundColor: 'transparent',
     },
-    
-
-
-    mediaWrapper: {
+    centeredMediaWrapper: {
         width,
         height,
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: 'black',
-        backgroundColor: '#fff'
+    },
+    media: {
+        width,
+        height,
     },
     loaderOverlay: {
         position: 'absolute',
@@ -376,27 +335,58 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
-
-    muteButton: {
-        position: 'absolute',
-        top: 70,
-        left: 20,
+    closeButton: {
         backgroundColor: 'rgba(0,0,0,0.6)',
         borderRadius: 20,
         width: 36,
         height: 36,
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 10,
     },
-    playIconOverlay: {
-        ...StyleSheet.absoluteFillObject,
+    muteButton: {
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        borderRadius: 20,
+        width: 36,
+        height: 36,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(0,0,0,0.3)',
-        borderRadius: 6,
     },
-
+    closeText: {
+        color: 'white',
+        fontSize: 20,
+        fontWeight: 'bold',
+    },
+    progressBarWrapper: {
+        height: 4,
+        backgroundColor: '#555',
+        borderRadius: 2,
+        overflow: 'hidden',
+        width: '90%',
+        alignSelf: 'center',
+        marginTop: 10,
+    },
+    progressBar: {
+        height: '100%',
+        backgroundColor: '#00aced',
+    },
+    controlOverlay: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        backgroundColor: 'rgba(0, 0, 0, 0.4)',
+        borderRadius: 8,
+        marginVertical: 10,
+    },
+    controlButton: {
+        padding: 10,
+    },
+    thumbnailListWrapper: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingTop: 8,
+    },
     thumbnailList: {
         flexDirection: 'row',
     },
@@ -415,53 +405,11 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         backgroundColor: '#111',
     },
-    media: {
-        width,
-        height,
-    },
-    centeredMediaWrapper: {
-        width,
-        height,
+    playIconOverlay: {
+        ...StyleSheet.absoluteFillObject,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'black',
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        borderRadius: 6,
     },
-    
-
-    topButtonsContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingTop: 20,
-    },
-    closeButton: {
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        borderRadius: 20,
-        width: 36,
-        height: 36,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    muteButton: {
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        borderRadius: 20,
-        width: 36,
-        height: 36,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-
-    closeText: {
-        color: 'white',
-        fontSize: 20,
-        fontWeight: 'bold',
-    },
-    thumbnailListWrapper: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingTop: 8,
-        backgroundColor: 'transparent',
-    },
-    
-
 });

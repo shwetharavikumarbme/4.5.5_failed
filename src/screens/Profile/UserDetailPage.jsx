@@ -10,6 +10,7 @@ import maleImage from '../../images/homepage/dummy.png';
 import femaleImage from '../../images/homepage/female.jpg';
 import default_image1 from '../../images/homepage/image.jpg'
 import { openMediaViewer } from '../helperComponents.jsx/mediaViewer';
+import { MyPostBody } from '../Forum/forumBody';
 
 
 
@@ -438,7 +439,12 @@ const UserDetailsPage = () => {
 
         <View style={styles.textContainer}>
           <Text style={styles.body} numberOfLines={1}>{getSlicedTitle(item.title || "")}</Text>
-          <Text style={styles.body} numberOfLines={1}>{item.resource_body || ""}</Text>
+          {/* <Text style={styles.body} numberOfLines={1}>{item.resource_body || ""}</Text> */}
+          <MyPostBody
+            html={item.resource_body}
+            forumId={item?.resource_id}
+            numberOfLines={2}
+          />
           <Text style={styles.labelProduct}>{formattedDate || ""}</Text>
 
         </View>
@@ -489,7 +495,12 @@ const UserDetailsPage = () => {
 
         <View style={styles.textContainer}>
 
-          <Text style={styles.body} numberOfLines={1} >{(item.forum_body || "")}</Text>
+          {/* <Text style={styles.body} numberOfLines={1} >{(item.forum_body || "")}</Text> */}
+          <MyPostBody
+            html={item.forum_body}
+            forumId={item?.forum_id}
+            numberOfLines={2}
+          />
           <Text style={styles.labelProduct}>{formattedDate || ""}</Text>
 
         </View>
@@ -640,8 +651,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     padding: 10,
 
-
-
   },
 
 
@@ -653,12 +662,12 @@ const styles = StyleSheet.create({
 
   imageContainer: {
     width: 150,
-    height: 150,
-    borderRadius: 75,
+    height: 140,
     alignSelf: 'center',
-    marginBottom: 20,
     alignContent: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    padding: 10,
+    
   },
 
   imageContainerprofile: {
@@ -689,14 +698,12 @@ const styles = StyleSheet.create({
   },
   textContainer: {
     flex: 1,
-    justifyContent: 'space-between',
-    // marginLeft:0,
+    paddingHorizontal: 10,
 
   },
   card: {
     backgroundColor: '#f9f9f9',
     borderRadius: 10,
-    padding: 10,
     marginBottom: 12,  // Space between rows
     width: '48%', // Default width for larger screens (two cards per row)
     elevation: 3,

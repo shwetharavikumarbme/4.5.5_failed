@@ -23,7 +23,7 @@ import { openMediaViewer } from "../helperComponents.jsx/mediaViewer";
 import { fetchForumReactionsBatch, fetchForumReactionsRaw } from "../helperComponents.jsx/ForumReactions";
 
 import ReactionSheet from "../helperComponents.jsx/ReactionUserSheet";
-import { ForumBody, generateHighlightedHTML } from "./forumBody";
+import { ForumBody, generateHighlightedHTML, normalizeHtml } from "./forumBody";
 import { fetchMediaForPost } from "../helperComponents.jsx/forumViewableItems";
 import { fetchCommentCount, fetchCommentCounts } from "../AppUtils/CommentCount";
 
@@ -299,6 +299,7 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
   const dispatch = useDispatch();
   const navigation = useNavigation();
   const [localPosts, setLocalPosts] = useState([]);
+  // console.log('localPosts',localPosts[1])
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeVideo, setActiveVideo] = useState(null);
@@ -706,7 +707,7 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
         <View style={{ paddingHorizontal: 10, }}>
 
           <ForumBody
-            html={generateHighlightedHTML(item.forum_body, searchQuery)}
+            html={normalizeHtml(item?.forum_body, searchQuery)}
             forumId={item.forum_id}
             isExpanded={expandedTexts[item.forum_id]}
             toggleFullText={toggleFullText}
@@ -949,7 +950,6 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
             </TouchableOpacity>
           </View>
         </View>
-
 
       </View>
 

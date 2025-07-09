@@ -485,9 +485,9 @@ const CommentScreen = ({ route }) => {
           </View>
 
 
-          <View style={{ paddingHorizontal: 10 }}>
+          <View style={{ paddingHorizontal: 16, }}>
             <ForumBody
-              html={normalizeHtml(post?.forum_body)}
+              html={normalizeHtml(post?.forum_body, '')}
               forumId={post?.forum_id}
               isExpanded={expandedTexts[post?.forum_id]}
               toggleFullText={toggleFullText}
@@ -769,7 +769,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 15,
-    paddingHorizontal: 10,
+    paddingHorizontal: 16,
 
 
   },

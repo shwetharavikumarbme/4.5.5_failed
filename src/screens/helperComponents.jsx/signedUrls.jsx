@@ -15,31 +15,31 @@ const defaultImageUriMale = Image.resolveAssetSource(maleImage).uri;
 
 export const getSignedUrl = async (id, key) => {
 
-    if (!key) {
-        return { [id]: '' };
-    }
-    try {
-        const res = await apiClient.post('/getObjectSignedUrl', {
-            command: 'getObjectSignedUrl',
-            key,
-        });
+  if (!key) {
+    return { [id]: '' };
+  }
+  try {
+    const res = await apiClient.post('/getObjectSignedUrl', {
+      command: 'getObjectSignedUrl',
+      key,
+    });
 
-        return { [id]: res.data };
-    } catch (error) {
-        return { [id]: '' };
-    }
+    return { [id]: res.data };
+  } catch (error) {
+    return { [id]: '' };
+  }
 };
 
 export const getTimeDisplay = (timestampInSeconds) => {
-    const secondsAgo = Math.floor(Date.now() / 1000 - timestampInSeconds);
+  const secondsAgo = Math.floor(Date.now() / 1000 - timestampInSeconds);
 
-    if (secondsAgo < 60) return `few sec ago`;
-    const minutesAgo = Math.floor(secondsAgo / 60);
-    if (minutesAgo < 60) return `${minutesAgo} mins ago`;
-    const hoursAgo = Math.floor(minutesAgo / 60);
-    if (hoursAgo < 24) return `${hoursAgo} hours ago`;
+  if (secondsAgo < 60) return `few sec ago`;
+  const minutesAgo = Math.floor(secondsAgo / 60);
+  if (minutesAgo < 60) return `${minutesAgo} mins ago`;
+  const hoursAgo = Math.floor(minutesAgo / 60);
+  if (hoursAgo < 24) return `${hoursAgo} hours ago`;
 
-    return new Date(timestampInSeconds * 1000).toLocaleDateString('en-GB');
+  return new Date(timestampInSeconds * 1000).toLocaleDateString('en-GB');
 };
 
 export const getTimeDisplayHome = (timestampInSeconds) => {
@@ -79,6 +79,7 @@ const escapeRegExp = (string) => {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape special characters
 };
 
+
 export const highlightMatch = (
   text = '',
   query = '',
@@ -89,11 +90,11 @@ export const highlightMatch = (
     paddingHorizontal: 2,
   }
 ) => {
-
+ 
   if (!query?.trim()) return <Text>{text}</Text>;
 
   const safeQuery = escapeRegExp(query);
-  const regex = new RegExp(`(${safeQuery})`, 'ig'); 
+  const regex = new RegExp(`(${safeQuery})`, 'ig');
   const parts = text.split(regex);
 
   return (

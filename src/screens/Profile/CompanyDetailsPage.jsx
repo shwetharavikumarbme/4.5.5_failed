@@ -10,6 +10,7 @@ import FastImage from 'react-native-fast-image';
 import apiClient from '../ApiClient';
 import { useFileOpener } from '../helperComponents.jsx/fileViewer';
 import { openMediaViewer } from '../helperComponents.jsx/mediaViewer';
+import { MyPostBody } from '../Forum/forumBody';
 
 
 const defaultImageCompany = Image.resolveAssetSource(defaultImage).uri;
@@ -306,14 +307,14 @@ const CompanyDetailsPage = () => {
     const [loading, setLoading] = useState(false);
 
     const handleProductSelect = (item) => {
-   
+
       setShowProductModal(false);
       navigation.navigate('ProductDetails', {
         product_id: item.product_id,
         company_id: userId,
       });
     };
-    
+
 
     const handleServiceSelect = (item) => {
       setShowServiceModal(false);
@@ -455,7 +456,7 @@ const CompanyDetailsPage = () => {
   };
 
 
-  
+
   const fetchProfile = async () => {
     setLoading(true);
     try {
@@ -463,11 +464,11 @@ const CompanyDetailsPage = () => {
         command: 'getCompanyDetails',
         company_id: userId,
       });
-  
+
       if (response.data.status === 'success') {
         const profileData = response.data.status_message;
         setProfile(profileData);
-  
+
         // Only proceed to check fileKey and set image if user_type is "company"
         if (profileData.user_type === 'company') {
           if (profileData.fileKey && profileData.fileKey !== 'null') {
@@ -476,7 +477,7 @@ const CompanyDetailsPage = () => {
                 command: 'getObjectSignedUrl',
                 key: profileData.fileKey,
               });
-  
+
               const imgUrlData = res.data;
               if (imgUrlData && typeof imgUrlData === 'string') {
                 setImageUrl(imgUrlData);
@@ -499,7 +500,7 @@ const CompanyDetailsPage = () => {
       setLoading(false);
     }
   };
-  
+
 
 
 
@@ -731,7 +732,12 @@ const CompanyDetailsPage = () => {
 
         <View style={styles.textContainer}>
           <Text style={styles.body} numberOfLines={1}>{getSlicedTitle(item.title || "")}</Text>
-          <Text style={styles.body} numberOfLines={1}>{item.resource_body || ""}</Text>
+          {/* <Text style={styles.body} numberOfLines={1}>{item.resource_body || ""}</Text> */}
+          <MyPostBody
+            html={item.resource_body}
+            forumId={item?.resource_id}
+            numberOfLines={2}
+          />
           <Text style={styles.labelProduct}>{formattedDate || ""}</Text>
 
         </View>
@@ -781,7 +787,12 @@ const CompanyDetailsPage = () => {
         </View>
 
         <View style={styles.textContainer}>
-          <Text style={styles.body} numberOfLines={1} >{(item.forum_body || "")}</Text>
+          {/* <Text style={styles.body} numberOfLines={1} >{(item.forum_body || "")}</Text> */}
+          <MyPostBody
+            html={item.forum_body}
+            forumId={item?.forum_id}
+            numberOfLines={2}
+          />
           <Text style={styles.labelProduct}>{formattedDate || ""}</Text>
         </View>
 

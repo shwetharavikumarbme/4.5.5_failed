@@ -308,10 +308,9 @@ const YourForumListScreen = ({ navigation, route }) => {
 
           <View style={styles.textContainer}>
             <MyPostBody
-              html={forumBodyHtml}
+              html={item.forum_body}
               forumId={item?.forum_id}
               numberOfLines={2}
-
             />
             <Text style={styles.value}>{formattedDate || ""}</Text>
 
