@@ -175,10 +175,11 @@ export const selectVideo = async ({
   setFile,
   setFileType,
   overlayRef,
+  setMediaMeta,
 }) => {
   if (isCompressing) {
+    console.log('[selectVideo] Upload already in progress');
     showToast("Uploading is already in progress", "Info");
-
     return;
   }
 
@@ -189,59 +190,108 @@ export const selectVideo = async ({
       videoQuality: 'high',
     };
 
+    console.log('[selectVideo] Launching video picker');
     launchImageLibrary(options, async (response) => {
-      if (response.didCancel) return;
+      if (response.didCancel) {
+        console.log('[selectVideo] User cancelled video picker');
+        return;
+      }
 
       if (response.errorCode) {
-
+        console.error('[selectVideo] Error picking video:', response.errorMessage);
         showToast("Something went wrong", "error");
-
         return;
       }
 
       const asset = response.assets[0];
       const totalSeconds = Math.floor(asset.duration || 0);
+      console.log(`[selectVideo] Selected video duration: ${totalSeconds} seconds`);
 
       if (totalSeconds > 1800) {
-
+        console.warn('[selectVideo] Video too long:', totalSeconds);
         showToast("Please select a video of 30 minutes or shorter", "error");
-
         return;
       }
 
-      const persistentUri = await moveToPersistentStorage(asset.uri);
-      const previewThumbnail = await generateVideoThumbnail(persistentUri);
+      try {
+        const originalUri = asset.uri.replace('file://', '');
+        const originalStats = await RNFS.stat(originalUri);
+        const originalSize = originalStats.size;
+        const originalWidth = asset.width;
+        const originalHeight = asset.height;
 
-      if (previewThumbnail) {
-        setThumbnailUri(previewThumbnail);
+        console.log('[selectVideo] Original video size:', originalSize);
+        console.log('[selectVideo] Dimensions:', originalWidth, originalHeight);
 
-        setTimeout(async () => {
-          const finalThumb = await captureFinalThumbnail(overlayRef);
+        const persistentUri = await moveToPersistentStorage(asset.uri);
+        console.log('[selectVideo] Persistent URI:', persistentUri);
 
-          if (finalThumb) {
-            const resizedThumbUri = await resizeImage(finalThumb);
-            setCapturedThumbnailUri(resizedThumbUri);
-          }
-        }, 300);
+        const previewThumbnail = await generateVideoThumbnail(persistentUri);
+        console.log('[selectVideo] Generated preview thumbnail:', previewThumbnail);
+
+        if (previewThumbnail) {
+          setThumbnailUri(previewThumbnail);
+
+          setTimeout(async () => {
+            try {
+              const finalThumb = await captureFinalThumbnail(overlayRef);
+              if (finalThumb) {
+                const resizedThumbUri = await resizeImage(finalThumb);
+                console.log('[selectVideo] Captured and resized thumbnail:', resizedThumbUri);
+                setCapturedThumbnailUri(resizedThumbUri);
+              } else {
+                console.warn('[selectVideo] Final thumbnail capture failed');
+              }
+            } catch (err) {
+              console.error('[selectVideo] Error capturing final thumbnail:', err);
+            }
+          }, 300);
+        }
+
+        setIsCompressing(true);
+        showToast("Uploading Video\nThis may take a moment..", "info");
+        console.log('[selectVideo] Starting compression...');
+
+        const compressedUri = await compressVideo(persistentUri);
+        setIsCompressing(false);
+
+        if (!compressedUri) {
+          console.error('[selectVideo] Compression failed');
+          return;
+        }
+
+        const compressedStats = await RNFS.stat(compressedUri.replace('file://', ''));
+        const compressedSize = compressedStats.size;
+        console.log('[selectVideo] Compressed video size:', compressedSize);
+
+        setFile({
+          uri: compressedUri,
+          type: asset.type,
+          name: asset.fileName || 'video.mp4',
+        });
+        setFileType(asset.type);
+
+        const meta = {
+          originalSize: originalSize,
+          compressedSize: compressedSize,
+          width: originalWidth,
+          height: originalHeight,
+          fileName: asset.fileName,
+          type: asset.type,
+          duration: asset.duration,
+        };
+
+        console.log('[selectVideo] Media metadata:', meta);
+        setMediaMeta(meta);
+      } catch (innerError) {
+        setIsCompressing(false);
+        console.error('[selectVideo] Inner error:', innerError);
+        showToast("Something went wrong", "error");
       }
-
-      setIsCompressing(true);
-
-      showToast("Uploading Video\nThis may take a moment..", "info");
-
-      const compressedUri = await compressVideo(persistentUri);
-
-      setIsCompressing(false);
-
-      setFile({
-        uri: compressedUri,
-        type: asset.type,
-        name: asset.fileName || 'video.mp4',
-      });
-      setFileType(asset.type);
     });
   } catch (error) {
-
+    setIsCompressing(false);
+    console.error('[selectVideo] Outer error:', error);
     showToast("Something went wrong", "error");
   }
 };

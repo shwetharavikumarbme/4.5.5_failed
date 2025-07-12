@@ -213,17 +213,29 @@ const otpRef = useRef('');
       apnsType = `${type}:${tokenPart}`;
     }
 
-    const deviceModel = DeviceInfo.getModel();
+    const deviceModel = await DeviceInfo.getModel(); // your existing usage
 
+    const deviceInfo = {
+      os: Platform.OS,
+      // osVersion: DeviceInfo.getSystemVersion(),
+      deviceName: await DeviceInfo.getDeviceName(),
+      model: deviceModel,
+      // brand: DeviceInfo.getBrand(),
+      appVersion: DeviceInfo.getVersion(),
+      // buildNumber: DeviceInfo.getBuildNumber(),
+      userAgent: await DeviceInfo.getUserAgent(),
+      ipAddress: await DeviceInfo.getIpAddress(),
+    };
+    
     const payload = {
       command: "createUserSession",
       user_id: userId,
       fcm_token: finalFcmToken,
       apns_type: apnsType,
-      deviceInfo: deviceModel,
+      deviceInfo: deviceInfo,
     };
 
-    // console.log("📦 [Payload Sent to API]:", payload);
+    console.log("📦 [Payload Sent to API]:", payload);
 
     try {
       const response = await axios.post(

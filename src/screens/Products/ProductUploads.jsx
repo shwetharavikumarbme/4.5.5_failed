@@ -22,6 +22,7 @@ import { showToast } from '../AppUtils/CustomToast';
 import { useNetwork } from '../AppUtils/IdProvider';
 import { EventRegister } from 'react-native-event-listeners';
 import AppStyles from '../../assets/AppStyles';
+import Message1 from '../../components/Message1';
 
 const MAX_IMAGE_SIZE_MB = 5;
 const MAX_VIDEO_SIZE_MB = 10;
@@ -47,6 +48,11 @@ const CreateProduct = () => {
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [myId, setMyId] = useState(null);
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertIconType, setAlertIconType] = useState('');
+  const [hasNavigated, setHasNavigated] = useState(false);
 
   useEffect(() => {
     const getUserData = async () => {
@@ -536,11 +542,7 @@ const CreateProduct = () => {
         showToast("Product uploaded successfully", 'success');
 
         if (fromSignup) {
-          Alert.alert(
-            'Success',
-            'You have successfully signed up!\n\nEnjoy Your 30-Days Free Trial!\nExperience all the premium features of our app at no cost for 30 days. Dive in and explore everything we have to offer.',
-            [{ text: 'OK', onPress: () => navigation.replace('CompanyBottom') }]
-          );
+          showTrialSuccessAlert();
         } else {
           navigation.goBack();
         }
@@ -569,19 +571,18 @@ const CreateProduct = () => {
 
 
   const showTrialSuccessAlert = () => {
-    Alert.alert(
-      'Success',
-      'You have successfully signed up!\n\nEnjoy Your 30-Days Free Trial!\nExperience all the premium features of our app at no cost for 30 days. Dive in and explore everything we have to offer.',
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            showToast('Signup successful', 'success');
-            navigation.replace('CompanyBottom');
-          },
-        },
-      ]
+    setAlertTitle('Success');
+    setAlertMessage(
+      <Text style={{ textAlign: 'center' }}>
+        You have successfully signed up!
+        {'\n\n'}
+        Enjoy <Text style={{ color: '#000', fontWeight: 'bold' }}>Your 30-Days Free Trial</Text>!
+        {'\n'}
+        Experience all the premium features of our app at no cost for 30 days. Dive in and explore everything we have to offer.
+      </Text>
     );
+    setAlertIconType('congratulations');
+    setShowAlert(true);
   };
 
 
@@ -1028,7 +1029,25 @@ const CreateProduct = () => {
 
         </TouchableOpacity>
       </KeyboardAwareScrollView>
-
+      <Message1
+  visible={showAlert}
+  title={alertTitle}
+  message={alertMessage}
+  iconType={alertIconType}
+  onOk={() => {
+    if (hasNavigated) return;
+    setHasNavigated(true);
+    setShowAlert(false);
+    setHasChanges(false);
+    // showToast('Signup successful', 'success');
+    setTimeout(() => {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'CompanyBottom' }],
+      });
+    }, 300);
+  }}
+/>
       <Message3
         visible={showModal}
         onClose={() => setShowModal(false)}  // Optional if you want to close it from outside

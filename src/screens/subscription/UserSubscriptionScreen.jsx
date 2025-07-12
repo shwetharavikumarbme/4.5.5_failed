@@ -44,8 +44,8 @@ const UserSubscriptionScreen = () => {
     {
       name: 'Premium',
       day: '365',
-      price: '2',
-      amount: 2,
+      price: '649',
+      amount: 649,
       validity: '365',
       features: [true, true, true, true, true, true, true, true, true],
     },
@@ -479,7 +479,14 @@ const UserSubscriptionScreen = () => {
               <View style={styles.recommendModalContent}>
                 <TouchableOpacity
                   style={styles.closeIcon}
-                  onPress={() => setShowRecommendedModal(false)}
+                  // onPress={() => setShowRecommendedModal(false)}
+                  onPress={() => {
+                    setShowRecommendedModal(false);
+                    setTimeout(() => {
+                      initiatePayment(selectedPackage);
+                    }, 300);
+
+                  }}
                 >
                   <Icon name="close" size={22} color="#444" />
                 </TouchableOpacity>

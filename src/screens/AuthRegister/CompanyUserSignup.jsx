@@ -34,7 +34,7 @@ import { showToast } from '../AppUtils/CustomToast';
 import apiClient from '../ApiClient';
 import AppStyles from '../../assets/AppStyles';
 import { ActionSheetIOS } from 'react-native';
-
+import DeviceInfo from 'react-native-device-info';
 
 
 
@@ -921,10 +921,26 @@ const CompanyUserSignupScreen = () => {
         }
       }
 
+      const deviceModel = await DeviceInfo.getModel(); // your existing usage
+
+      const deviceInfo = {
+        os: Platform.OS,
+        // osVersion: DeviceInfo.getSystemVersion(),
+        deviceName: await DeviceInfo.getDeviceName(),
+        model: deviceModel,
+        // brand: DeviceInfo.getBrand(),
+        appVersion: DeviceInfo.getVersion(),
+        // buildNumber: DeviceInfo.getBuildNumber(),
+        userAgent: await DeviceInfo.getUserAgent(),
+        ipAddress: await DeviceInfo.getIpAddress(),
+      };
+
       const payload = {
         command: 'createUserSession',
         user_id: userId,
         fcm_token: tokenToSend,
+        deviceInfo: deviceInfo,
+
       };
 
       console.log("📦 [Payload Sent to API]:", payload);

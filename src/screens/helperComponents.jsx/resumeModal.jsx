@@ -15,7 +15,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { showToast } from '../AppUtils/CustomToast';
 import { useNetwork } from '../AppUtils/IdProvider';
 
-const ContactSupplierModal = ({ visible, onClose, company_id }) => {
+const ResumeModal = ({ visible, onClose, company_id }) => {
     const { myId, myData } = useNetwork();
     const [contactDetails, setContactDetails] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -101,20 +101,20 @@ const ContactSupplierModal = ({ visible, onClose, company_id }) => {
                                         <Text style={styles.companyName}>{contactDetails.target_user_name}</Text>
                                     )}
 
-                                    {contactDetails.target_user_phone_number && (
+                                    {/* {contactDetails.target_user_phone_number && (
                                         <TouchableOpacity
                                             onPress={() => openDialPad(contactDetails.target_user_phone_number)}
                                             style={styles.actionButton}
                                         >
                                             <Text style={styles.actionButtonText}>{contactDetails.target_user_phone_number}</Text>
                                         </TouchableOpacity>
-                                    )}
+                                    )} */}
 
-                                    {/* {contactDetails.target_user_resume_key && (
+                                    {contactDetails.target_user_resume_key && (
                                         <TouchableOpacity style={styles.actionButton} onPress={viewResume}>
                                             <Text style={styles.actionButtonText}>View Resume</Text>
                                         </TouchableOpacity>
-                                    )} */}
+                                    )}
 
                                     <View style={styles.successMessageRow}>
                                         <Icon name="warning" size={18} color="#ccc" style={styles.warningIcon} />
@@ -224,4 +224,4 @@ const styles = StyleSheet.create({
 });
 
 
-export default ContactSupplierModal;
+export default ResumeModal;

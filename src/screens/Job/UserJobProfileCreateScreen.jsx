@@ -349,7 +349,7 @@ const UserJobProfileCreateScreen = () => {
   const handlePostSubmission = async () => {
     console.log('🟡 Starting handlePostSubmission');
     setHasChanges(false);
-  
+
     const trimmedPostData = {
       domain_strength: postData.domain_strength?.trim(),
       work_experience: postData.work_experience?.trim(),
@@ -360,9 +360,9 @@ const UserJobProfileCreateScreen = () => {
       languages: postData.languages?.trim(),
       industry_type: postData.industry_type?.trim(),
     };
-  
+
     console.log('📋 Trimmed Post Data:', trimmedPostData);
-  
+
     // Mandatory field validation
     if (
       !trimmedPostData.domain_strength ||
@@ -375,17 +375,17 @@ const UserJobProfileCreateScreen = () => {
       showToast('Please fill all mandatory fileds, including CV', 'error');
       return;
     }
-  
+
     console.log('📁 Attempting to upload file...');
     const uploadedFileKey = await handleUploadFile();
     console.log('✅ File uploaded key:', uploadedFileKey);
-  
+
     if (!uploadedFileKey) {
       console.error('❌ File upload failed or invalid file');
       showToast('Please upload a valid PDF file', 'error');
       return;
     }
-  
+
     try {
       const postPayload = {
         command: "createJobProfile",
@@ -400,12 +400,12 @@ const UserJobProfileCreateScreen = () => {
         expert_in: trimmedPostData.expert_in,
         resume_key: uploadedFileKey,
       };
-  
+
       console.log('📦 Payload for submission:', postPayload);
-  
+
       const res = await apiClient.post('/createJobProfile', postPayload);
       console.log('📨 API response:', res?.data);
-  
+
       if (res?.data?.status === 'success') {
         showToast('Job profile created successfully', 'success');
         console.log('✅ Job profile created. Navigating back...');
@@ -420,20 +420,20 @@ const UserJobProfileCreateScreen = () => {
         error?.message?.includes('timeout') ||
         error?.message?.includes('Failed to fetch') ||
         error?.isAxiosError;
-  
+
       console.error('❌ Caught error during API call:', error);
-  
+
       if (isNetworkError) {
         showToast("You don't have an internet connection", 'error');
       } else {
         showToast('Something went wrong.', 'error');
       }
     }
-  
+
     setHasChanges(false);
     console.log('✅ handlePostSubmission complete');
   };
-  
+
 
 
 
@@ -504,6 +504,10 @@ const UserJobProfileCreateScreen = () => {
               placeholder="Select skills"
               multiSelect
             />
+            {selectedSkills.length === 0 && (
+              <Text style={styles.instructionText}>You can select up to 3 skills</Text>
+            )}
+
             {renderSelectedItems(selectedSkills, removeSkill)}
           </View>
 
@@ -568,6 +572,10 @@ const UserJobProfileCreateScreen = () => {
               placeholder="Select cities"
               multiSelect
             />
+            {selectedCities.length === 0 && (
+              <Text style={styles.instructionText}>You can select up to 5 cities</Text>
+            )}
+
             {renderSelectedItems(selectedCities, removeCity)}
           </View>
 
@@ -652,6 +660,14 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
 
   },
+  instructionText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    fontStyle: 'italic',
+    paddingHorizontal:10
+  },
+
   heading: {
     fontSize: 22,
     fontWeight: '500',

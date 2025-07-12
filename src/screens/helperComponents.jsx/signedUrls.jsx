@@ -30,88 +30,6 @@ export const getSignedUrl = async (id, key) => {
   }
 };
 
-export const getTimeDisplay = (timestampInSeconds) => {
-  const secondsAgo = Math.floor(Date.now() / 1000 - timestampInSeconds);
-
-  if (secondsAgo < 60) return `few sec ago`;
-  const minutesAgo = Math.floor(secondsAgo / 60);
-  if (minutesAgo < 60) return `${minutesAgo} mins ago`;
-  const hoursAgo = Math.floor(minutesAgo / 60);
-  if (hoursAgo < 24) return `${hoursAgo} hours ago`;
-
-  return new Date(timestampInSeconds * 1000).toLocaleDateString('en-GB');
-};
-
-export const getTimeDisplayHome = (timestampInSeconds) => {
-  const secondsAgo = Math.floor(Date.now() / 1000 - timestampInSeconds);
-
-  if (secondsAgo < 60) return `few sec ago`;
-
-  const minutesAgo = Math.floor(secondsAgo / 60);
-  if (minutesAgo < 60) return `${minutesAgo} mins ago`;
-
-  const hoursAgo = Math.floor(minutesAgo / 60);
-  if (hoursAgo < 24) return `${hoursAgo} hours ago`;
-
-  const daysAgo = Math.floor(hoursAgo / 24);
-  return `${daysAgo} day${daysAgo > 1 ? 's' : ''} ago`;
-};
-
-export const getTimeDisplayForum = (timestampInSeconds) => {
-  const secondsAgo = Math.floor(Date.now() / 1000 - timestampInSeconds);
-
-  if (secondsAgo < 60) return `few sec ago`;
-  const minutesAgo = Math.floor(secondsAgo / 60);
-  if (minutesAgo < 60) return `${minutesAgo} mins ago`;
-  const hoursAgo = Math.floor(minutesAgo / 60);
-  if (hoursAgo < 24) return `${hoursAgo} hours ago`;
-
-  const date = new Date(timestampInSeconds * 1000);
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are 0-based
-  const year = date.getFullYear();
-
-  return `${day}-${month}-${year}`;
-};
-
-
-const escapeRegExp = (string) => {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape special characters
-};
-
-
-export const highlightMatch = (
-  text = '',
-  query = '',
-  highlightStyle = {
-    backgroundColor: '#fff9c4',
-    color: 'black',
-    borderRadius: 4,
-    paddingHorizontal: 2,
-  }
-) => {
- 
-  if (!query?.trim()) return <Text>{text}</Text>;
-
-  const safeQuery = escapeRegExp(query);
-  const regex = new RegExp(`(${safeQuery})`, 'ig');
-  const parts = text.split(regex);
-
-  return (
-    <Text>
-      {parts.map((part, index) =>
-        part.toLowerCase() === query.toLowerCase() ? (
-          <Text key={index} style={highlightStyle}>
-            {part}
-          </Text>
-        ) : (
-          <Text key={index}>{part}</Text>
-        )
-      )}
-    </Text>
-  );
-};
-
 export const useLazySignedUrls = (
   allItems = [],
   getSignedUrl,
@@ -234,5 +152,91 @@ export const useLazySignedUrls = (
     preloadUrls, // 🔥 manual preload method (use in scroll handler)
   };
 };
+
+
+
+
+export const getTimeDisplay = (timestampInSeconds) => {
+  const secondsAgo = Math.floor(Date.now() / 1000 - timestampInSeconds);
+
+  if (secondsAgo < 60) return `few sec ago`;
+  const minutesAgo = Math.floor(secondsAgo / 60);
+  if (minutesAgo < 60) return `${minutesAgo} mins ago`;
+  const hoursAgo = Math.floor(minutesAgo / 60);
+  if (hoursAgo < 24) return `${hoursAgo} hours ago`;
+
+  return new Date(timestampInSeconds * 1000).toLocaleDateString('en-GB');
+};
+
+export const getTimeDisplayHome = (timestampInSeconds) => {
+  const secondsAgo = Math.floor(Date.now() / 1000 - timestampInSeconds);
+
+  if (secondsAgo < 60) return `few sec ago`;
+
+  const minutesAgo = Math.floor(secondsAgo / 60);
+  if (minutesAgo < 60) return `${minutesAgo} mins ago`;
+
+  const hoursAgo = Math.floor(minutesAgo / 60);
+  if (hoursAgo < 24) return `${hoursAgo} hours ago`;
+
+  const daysAgo = Math.floor(hoursAgo / 24);
+  return `${daysAgo} day${daysAgo > 1 ? 's' : ''} ago`;
+};
+
+export const getTimeDisplayForum = (timestampInSeconds) => {
+  const secondsAgo = Math.floor(Date.now() / 1000 - timestampInSeconds);
+
+  if (secondsAgo < 60) return `few sec ago`;
+  const minutesAgo = Math.floor(secondsAgo / 60);
+  if (minutesAgo < 60) return `${minutesAgo} mins ago`;
+  const hoursAgo = Math.floor(minutesAgo / 60);
+  if (hoursAgo < 24) return `${hoursAgo} hours ago`;
+
+  const date = new Date(timestampInSeconds * 1000);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are 0-based
+  const year = date.getFullYear();
+
+  return `${day}-${month}-${year}`;
+};
+
+
+const escapeRegExp = (string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape special characters
+};
+
+
+export const highlightMatch = (
+  text = '',
+  query = '',
+  highlightStyle = {
+    backgroundColor: '#fff9c4',
+    color: 'black',
+    borderRadius: 4,
+    paddingHorizontal: 2,
+  }
+) => {
+ 
+  if (!query?.trim()) return <Text>{text}</Text>;
+
+  const safeQuery = escapeRegExp(query);
+  const regex = new RegExp(`(${safeQuery})`, 'ig');
+  const parts = text.split(regex);
+
+  return (
+    <Text>
+      {parts.map((part, index) =>
+        part.toLowerCase() === query.toLowerCase() ? (
+          <Text key={index} style={highlightStyle}>
+            {part}
+          </Text>
+        ) : (
+          <Text key={index}>{part}</Text>
+        )
+      )}
+    </Text>
+  );
+};
+
 
 

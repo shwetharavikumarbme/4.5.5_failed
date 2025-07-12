@@ -20,9 +20,6 @@ import { getSignedUrl, getTimeDisplay, getTimeDisplayForum, getTimeDisplayHome }
 import { styles } from '../assets/AppStyles';
 import { ForumPostBody } from './Forum/forumBody';
 
-
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
-
 const UserSettingScreen = React.lazy(() => import('./Profile/UserSettingScreen'));
 const ProductsList = React.lazy(() => import('./Products/ProductsList'));
 const PageView = React.lazy(() => import('./Forum/PagerViewForum'));
@@ -61,39 +58,13 @@ const UserHomeScreen = React.memo(() => {
   const flatListRef = useRef(null);
 
   const [isProfileFetched, setIsProfileFetched] = useState(false);
-  const [activeSection, setActiveSection] = useState('jobs');
-  const scrollOffsetY = useRef(new Animated.Value(0)).current;
+  const scrollOffsetY = useRef(0);
 
-  const sectionThresholds = {
-    jobs: 234,
-    trendingPosts: 1592.6666666666667,
-    latestPosts: 3807,
-    products: 5819.333333333333,
-    services: 7509.666666666667,
+
+  const handleScroll = (event) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    scrollOffsetY.current = offsetY;
   };
-
-
-  const handleScroll = Animated.event(
-    [{ nativeEvent: { contentOffset: { y: scrollOffsetY } } }],
-    {
-      useNativeDriver: true,
-      listener: (event) => {
-        const offsetY = event.nativeEvent.contentOffset.y;
-
-        const entries = Object.entries(sectionThresholds);
-        for (let i = entries.length - 1; i >= 0; i--) {
-          const [section, threshold] = entries[i];
-          if (offsetY >= threshold) {
-            setActiveSection(section);
-            break;
-          }
-        }
-      },
-    }
-  );
-
-
-
 
 
 
@@ -469,52 +440,7 @@ const UserHomeScreen = React.memo(() => {
     }
   };
 
-  const scrollToSection = (section) => {
-    const offset = sectionThresholds[section];
-    flatListRef.current.scrollToOffset({ offset, animated: true });
-  };
-  const sectionKeys = {
-    Jobs: 'jobs',
-    Trending: 'trendingPosts',
-    Latest: 'latestPosts',
-    Products: 'products',
-    Services: 'services',
-  };
 
-  const tabFlatListRef = useRef(null);
-  const tabLabels = Object.keys(sectionKeys); // e.g., ['Jobs', 'Trending', ...]
-
-  useEffect(() => {
-    const index = tabLabels.findIndex(label => sectionKeys[label] === activeSection);
-    if (index !== -1 && tabFlatListRef.current) {
-      tabFlatListRef.current.scrollToIndex({
-        index,
-        animated: true,
-        viewPosition: 0.5,
-      });
-    }
-  }, [activeSection]);
-
-
-
-  const renderTab = (label) => {
-    const section = sectionKeys[label];
-    const isActive = activeSection === section;
-
-    return (
-      <View style={styles.tabWrapper} key={label}>
-        <TouchableOpacity
-          onPress={() => scrollToSection(section)}
-          activeOpacity={0.85}
-          style={[styles.tab, isActive && styles.activeTab]}
-        >
-          <Text style={[styles.tabText, isActive && styles.activeTabText]}>
-            {label}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
 
 
   return (
@@ -558,19 +484,16 @@ const UserHomeScreen = React.memo(() => {
 
       </View>
 
-      <AnimatedFlatList
+      <FlatList
         showsVerticalScrollIndicator={false}
         ref={flatListRef}
         onScroll={handleScroll}
-
         scrollEventThrottle={16}
-        // stickyHeaderIndices={[1]}
         onScrollBeginDrag={() => Keyboard.dismiss()}
         contentContainerStyle={{ paddingBottom: '20%', backgroundColor: 'whitesmoke' }}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
         data={[
           { type: 'banner1' },
-          // { type: 'tabs' }, 
           { type: 'jobs', data: jobs },
           { type: 'banner2' },
           { type: 'trendingPosts', data: trendingPosts },
@@ -587,31 +510,6 @@ const UserHomeScreen = React.memo(() => {
 
             case 'banner1':
               return <Banner01 />;
-
-            // case 'tabs':
-            //   return (
-            //     <View style={styles.tabScrollWrapper}>
-            //       <FlatList
-            //         horizontal
-            //         ref={tabFlatListRef}
-            //         data={tabLabels}
-            //         renderItem={({ item }) => renderTab(item)}
-            //         keyExtractor={(item) => item}
-            //         showsHorizontalScrollIndicator={false}
-            //         contentContainerStyle={styles.tabListContent}
-            //         getItemLayout={(data, index) => ({
-            //           length: 90,
-            //           offset: 90 * index,
-            //           index,
-            //         })}
-            //         scrollToIndexFailed={({ index }) => {
-            //           setTimeout(() => {
-            //             tabFlatListRef.current?.scrollToIndex({ index, animated: true });
-            //           }, 200);
-            //         }}
-            //       />
-            //     </View>
-            //   );
 
             case 'jobs':
               return (

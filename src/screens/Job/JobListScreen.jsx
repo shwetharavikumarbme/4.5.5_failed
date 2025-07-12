@@ -400,6 +400,7 @@ const JobListScreen = () => {
 
       const res = await withTimeout(apiClient.post('/searchJobPosts', requestData), 10000);
       const jobs = res.data.response || [];
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
 
       // Get signed URLs
       const urlPromises = jobs.map(job =>

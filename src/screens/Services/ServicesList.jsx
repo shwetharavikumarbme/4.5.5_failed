@@ -150,13 +150,14 @@ const ServicesList = () => {
         }
 
         debounceTimeout.current = setTimeout(() => {
-            handleSearch(trimmedText); 
+            handleSearch(trimmedText);
         }, 300);
     }, [handleSearch]);
 
+    const scrollViewRef = useRef(null);
+
     const handleSearch = async (text, selectedCategories = {}) => {
         if (!isConnected) {
-
             return;
         }
 
@@ -180,6 +181,7 @@ const ServicesList = () => {
 
         try {
             const res = await withTimeout(apiClient.post('/searchServices', requestData), 10000);
+            scrollViewRef.current?.scrollToOffset({ offset: 0, animated: true });
 
             const searchResults = res.data.response || [];
             setSearchResults(searchResults);
@@ -335,6 +337,7 @@ const ServicesList = () => {
                         searchInputRef.current?.blur?.();
 
                     }}
+                    ref={scrollViewRef}
                     keyboardShouldPersistTaps="handled"
                     keyExtractor={(item, index) => `${item.service_id}-${index}`}
                     showsVerticalScrollIndicator={false}

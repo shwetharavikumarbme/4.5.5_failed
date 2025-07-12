@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, Profiler, useMemo } from "react";
-import { View, Text, FlatList, Image, TouchableOpacity, TextInput, Dimensions, Modal, StyleSheet, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard, SafeAreaView, ActivityIndicator, ToastAndroid, Linking, RefreshControl, Share, ScrollView, Platform, Alert } from "react-native";
+import { View, Text, FlatList, Image, TouchableOpacity, TextInput, Dimensions, Modal, StyleSheet, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard, SafeAreaView, ActivityIndicator, ToastAndroid, Linking, RefreshControl, Share, ScrollView } from "react-native";
 import Video from "react-native-video";
 import { useIsFocused } from "@react-navigation/native";
 import { scale } from 'react-native-size-matters';
@@ -18,12 +18,11 @@ import { useFileOpener } from "../helperComponents.jsx/fileViewer";
 
 import { useConnection } from "../AppUtils/ConnectionProvider";
 import AppStyles from "../../assets/AppStyles";
-import { getTimeDisplay, highlightMatch } from "../helperComponents.jsx/signedUrls";
+import { getTimeDisplay, getTimeDisplayForum, highlightMatch } from "../helperComponents.jsx/signedUrls";
 import { openMediaViewer } from "../helperComponents.jsx/mediaViewer";
 import { ForumBody, normalizeHtml, } from "../Forum/forumBody";
 import { EventRegister } from "react-native-event-listeners";
-import ReactNativeBlobUtil from 'react-native-blob-util';
-console.log('ReactNativeBlobUtil',ReactNativeBlobUtil)
+
 const videoExtensions = [
     '.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.webm',
     '.m4v', '.3gp', '.3g2', '.f4v', '.f4p', '.f4a', '.f4b', '.qt', '.quicktime'
@@ -96,86 +95,6 @@ const ResourcesList = ({ navigation, route }) => {
         }
     };
 
-    const handleDownloadResource = async (fileKey, fileName) => {
-        if (!fileKey) return;
-        
-        setLoading1(true);
-        try {
-            // 1. Get the signed URL
-            const res = await apiClient.post('/getObjectSignedUrl', {
-                command: "getObjectSignedUrl",
-                key: fileKey
-            });
-            
-            const url = res.data;
-            if (!url) throw new Error("Failed to get download URL");
-    
-            // 2. Create a clean filename
-            const fileExtension = fileKey.split('.').pop();
-            const cleanFileName = (fileName || `resource_${Date.now()}`)
-                .replace(/[^a-z0-9]/gi, '_') // Replace special chars
-                .substring(0, 50); // Limit length
-            
-            const downloadFileName = `${cleanFileName}.${fileExtension}`;
-            
-            // 3. Define download path
-            const downloadDir = ReactNativeBlobUtil.fs.dirs.DocumentDir;
-            const downloadPath = `${downloadDir}/${downloadFileName}`;
-    
-            // 4. Download the file
-            const downloadRes = await ReactNativeBlobUtil.config({
-                fileCache: true,
-                path: downloadPath,
-                appendExt: fileExtension
-            }).fetch('GET', url);
-    
-            // 5. For iOS, show share sheet to let user save
-            if (Platform.OS === 'ios') {
-                const options = {
-                    type: getMimeType(fileExtension),
-                    url: `file://${downloadRes.path()}`,
-                    filename: downloadFileName,
-                    saveToFiles: true // iOS 11+ only - allows saving directly to Files app
-                };
-    
-                await Share.open(options);
-            } else {
-                // Android implementation would go here
-                Alert.alert('Download complete! File saved to your device');
-            }
-    
-        } catch (error) {
-            console.error('Download failed:', error);
-            if (error.message !== 'User did not share') { // Ignore user cancellation
-                Alert.alert(
-                    'Download Failed',
-                    'Could not download the file. Please try again later.',
-                    [{ text: 'OK' }]
-                );
-            }
-        } finally {
-            setLoading1(false);
-        }
-    };
-    
-    // Helper functions
-    const getMimeType = (ext) => {
-        const types = {
-            pdf: 'application/pdf',
-            doc: 'application/msword',
-            docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            xls: 'application/vnd.ms-excel',
-            xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            ppt: 'application/vnd.ms-powerpoint',
-            pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            txt: 'text/plain',
-            jpg: 'image/jpeg',
-            png: 'image/png',
-            webp: 'image/webp'
-        };
-        return types[ext.toLowerCase()] || 'application/octet-stream';
-    };
-    
     useEffect(() => {
         const listener = EventRegister.addEventListener('onResourcePostCreated', async ({ newPost }) => {
             console.log('[onResourcePostCreated] New post received:', newPost);
@@ -510,7 +429,7 @@ const ResourcesList = ({ navigation, route }) => {
                                     <Text style={styles.title}>{item.author_category || ''}</Text>
                                 </View>
                                 <View>
-                                    <Text style={[styles.date1]}>{getTimeDisplay(item.posted_on)}</Text>
+                                    <Text style={[styles.date1]}>{getTimeDisplayForum(item.posted_on)}</Text>
                                 </View>
                             </View>
                         </View>
@@ -519,7 +438,7 @@ const ResourcesList = ({ navigation, route }) => {
 
                     <View style={{ paddingHorizontal: 15, marginVertical: 5 }}>
                         {/* <Text style={styles.title1}>{item?.title}</Text> */}
-                        <Text numberOfLines={1} style={styles.title1}>{highlightMatch(item?.title || '', searchQuery)}</Text>
+                        <Text  style={styles.title1}>{highlightMatch(item?.title || '', searchQuery)}</Text>
 
                         <ForumBody
                             html={normalizeHtml(item?.resource_body, searchQuery)}
@@ -528,29 +447,21 @@ const ResourcesList = ({ navigation, route }) => {
                             toggleFullText={toggleFullText}
                         />
                     </View>
+
+
                     {item?.fileKey && isValidFileKey(item.fileKey) && (
-    <View style={styles.fileActionContainer}>
-        <TouchableOpacity
-            style={styles.fileButton}
-            onPress={() => handleOpenResume(item.fileKey)}
-        >
-            <Icon name="eye" size={24} color="#075cab" />
-            <Text style={styles.fileActionText}>View</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-            style={styles.fileButton}
-            onPress={() => handleDownloadResource(item.fileKey, item.title)}
-        >
-            <Icon name="download" size={24} color="#075cab" />
-            {loading1 ? (
-                <ActivityIndicator size="small" color="#075cab" />
-            ) : (
-                <Text style={styles.fileActionText}>Save</Text>
-            )}
-        </TouchableOpacity>
-    </View>
-)}
+                        <TouchableOpacity
+                            style={styles.centeredFileContainer}
+                            onPress={() => handleOpenResume(item.fileKey)}
+                        >
+                            <Icon name={getFileIcon(item.fileKey)} size={50} color="#075cab" />
+                            {loading1 ? (
+                                <ActivityIndicator size="small" color="#075cab" style={styles.viewResumeText} />
+                            ) : (
+                                <Text style={styles.actionText}>View</Text>
+                            )}
+                        </TouchableOpacity>
+                    )}
 
 
                     {/* Video Display */}
@@ -834,6 +745,12 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginTop: 20,
     },
+    actionText: {
+        marginTop: 5,
+        fontSize: 12,
+        color: '#075cab',
+    },
+
     loaderContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -879,8 +796,8 @@ const styles = StyleSheet.create({
 
     },
     date1: {
-        fontSize: 13,
-        color: 'black',
+        fontSize: 12,
+        color: '#666',
         // marginBottom: 5,
         fontWeight: '300',
 
@@ -1163,24 +1080,7 @@ const styles = StyleSheet.create({
         height: 30,
     },
 
-    fileActionContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        paddingVertical: 10,
-        borderTopWidth: 1,
-        borderTopColor: '#eee',
-        marginTop: 10
-    },
-    fileButton: {
-        alignItems: 'center',
-        padding: 10,
-        flex: 1
-    },
-    fileActionText: {
-        marginTop: 5,
-        color: '#075cab',
-        fontSize: 14
-    },
+
 });
 
 

@@ -12,11 +12,13 @@ import maleImage from '../../images/homepage/dummy.png';
 import femaleImage from '../../images/homepage/female.jpg';
 import companyImage from '../../images/homepage/buliding.jpg';
 import VideoPlayer from 'react-native-video-controls';
+
 import ParsedText from 'react-native-parsed-text';
 import apiClient from '../ApiClient';
 import { useNetwork } from '../AppUtils/IdProvider';
 import { getTimeDisplay } from '../helperComponents.jsx/signedUrls';
 import { ForumBody } from '../Forum/forumBody';
+import { openMediaViewer } from '../helperComponents.jsx/mediaViewer';
 const ResourcesDetails = () => {
     const route = useRoute();
     const navigation = useNavigation();
@@ -346,14 +348,17 @@ const ResourcesDetails = () => {
                     ) : mediaUrl && fileExtension ? (
                         <View style={styles.fileContainer} >
                             {['png', 'jpeg', 'jpg', 'webp'].includes(fileExtension) ? (
-                                <FastImage
-                                    source={{ uri: mediaUrl }}
-                                    style={styles.resourceImage}
-                                    resizeMode="contain"
-                                />
+                                <TouchableOpacity onPress={() => openMediaViewer([{ type: 'image', url: mediaUrl }])}
+                                    activeOpacity={1} >
+                                    <FastImage
+                                        source={{ uri: mediaUrl }}
+                                        style={styles.resourceImage}
+                                        resizeMode="contain"
+                                    />
+                                </TouchableOpacity>
                             ) : videoExtensions.includes(fileExtension) ? (
                                 <View style={styles.videoContainer} >
-                                    <VideoPlayer
+                                    <Video
                                         source={{ uri: mediaUrl }}
                                         style={[styles.video, { backgroundColor: "#fff" }]}
                                         resizeMode="contain"
@@ -361,6 +366,7 @@ const ResourcesDetails = () => {
                                         paused={!isVideoPlaying}
                                         disableFullscreen={true}
                                         repeat
+                                        controls
                                         onBack={() => null} // Optional: handle back button
                                         controlTimeout={2000} // Optional: hide controls after X ms
                                         tapAnywhereToPause={true}
@@ -495,7 +501,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginBottom: 10,
         color: '#000',
-    lineHeight: 21,
+        lineHeight: 21,
 
     },
 

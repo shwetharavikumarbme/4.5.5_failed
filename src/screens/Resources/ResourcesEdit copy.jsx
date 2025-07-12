@@ -297,6 +297,12 @@ const ResourcesEditScreen = () => {
 
           return;
         }
+        setFile({
+          uri: compressed.uri,
+          type: mimeType,
+          name: asset.fileName || `image_${Date.now()}.jpg`,
+        });
+        setFileType(mimeType);
 
         await uploadNewFile(compressed.uri, 'image/jpeg');
         setImageUri(compressed.uri);
@@ -918,6 +924,15 @@ const ResourcesEditScreen = () => {
     }, [])
   );
 
+  const fileName = file?.name || postData.fileKey?.split('/').pop() || '';
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+
+  // File type checks
+  const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext);
+  const isVideo = ['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext);
+  const isDocument = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'].includes(ext);
+
+
   return (
 
     <SafeAreaView style={styles.container1} >
@@ -1095,61 +1110,46 @@ const ResourcesEditScreen = () => {
 
         />
 
+    
 
-        {file?.uri || postData.fileKey ? (
-          <View key={file?.uri || postData.fileKey}>
+        {isVideo && file?.uri || imageUrl && (
+          <View style={styles.mediaContainer}>
+            <Video
+              source={{ uri: file?.uri || imageUrl }}
+              style={{ width: '100%', height: '100%' }}
+              resizeMode="contain"
 
+            />
             <TouchableOpacity onPress={handleRemoveMedia} style={styles.closeIcon}>
               <Ionicons name="close" size={24} color="black" />
             </TouchableOpacity>
-
-            {(() => {
-              const uri = file?.uri || videoUri || imageUrl; // Use selected file first
-              const fileName = file?.name || postData.fileKey?.split('/').pop() || '';
-              const ext = fileName.split('.').pop()?.toLowerCase();
-              const isVideo = ['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext || '');
-
-              if (isVideo) {
-                return (
-                  <View style={styles.mediaContainer}>
-
-                    <Video
-                      source={{ uri }}
-                      style={{ width: '100%', height: '100%' }}
-                      resizeMode="contain"
-                      muted
-                      controls
-                    />
+          </View>
+        )}
 
 
-                  </View>
-                );
-              } else if (['jpg', 'jpeg', 'png'].includes(ext || '')) {
-                return (
-                  <View style={styles.mediaContainer}>
-                    <FastImage
-                      source={{ uri }}
-                      style={styles.mediaPreview}
-                      resizeMode={FastImage.resizeMode.contain}
-                      onError={(error) => console.log('Image Load Error:', error.nativeEvent)}
-                    />
-                  </View>
-                );
-              } else {
-                return (
-                  <View style={{ alignItems: 'center', justifyContent: 'center', padding: 10 }}>
-                    <Text style={styles.fileName}>{fileName || 'Unknown File'}</Text>
-                    {uri ? (
-                      <TouchableOpacity onPress={() => Linking.openURL(uri)}>
-                        <Text style={styles.viewFileText}>View Document</Text>
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
-                );
-              }
-            })()}
+        {isImage && file?.uri || imageUrl ? (
+          <View style={{ width: '100%', height: 250, borderRadius: 10, overflow: 'hidden' }}>
+            <FastImage
+              source={{ uri: file?.uri || imageUrl }}
+              style={{ width: '100%', height: '100%' }}
+              resizeMode="contain"
+            />
+            <TouchableOpacity onPress={handleRemoveMedia} style={styles.closeIcon}>
+              <Ionicons name="close" size={24} color="black" />
+            </TouchableOpacity>
           </View>
         ) : (
+          <View style={{ alignItems: 'center', justifyContent: 'center', padding: 10 }}>
+            <Text style={styles.fileName}>{fileName || 'Unknown File'}</Text>
+            {uri ? (
+              <TouchableOpacity onPress={() => Linking.openURL(uri)}>
+                <Text style={styles.viewFileText}>View Document</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        )}
+
+        {!(file?.uri || postData.fileKey || imageUrl) && (
           <TouchableOpacity
             activeOpacity={1}
             style={styles.uploadButton}
@@ -1286,9 +1286,7 @@ const styles = StyleSheet.create({
     borderColor: 'gray',
     borderStyle: 'dotted',
     backgroundColor: 'white',
-    borderRadius: 10,
-    marginHorizontal:10
-
+    borderRadius: 10
   },
 
   container1: {
@@ -1345,7 +1343,9 @@ const styles = StyleSheet.create({
   mediaPreview: {
     width: '100%',
     height: '100%',
-resizeMode:'contain'
+    borderRadius: 10,
+    resizeMode: 'contain',
+    alignSelf: 'center'
   },
   fileName: {
     fontSize: 15,
@@ -1353,15 +1353,16 @@ resizeMode:'contain'
 
   },
 
-
+  imageContainer: {
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
   mediaContainer: {
 
     width: '100%',
     height: 250,
     borderRadius: 10,
     overflow: 'hidden',
-    paddingHorizontal: 10,
-
   },
   buttonContainer: {
     width: 80,

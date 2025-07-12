@@ -62,7 +62,6 @@ const App = () => {
   // useLastActivityTracker();
   // useReviewPrompt();
 
-  const [isNavigationReady, setIsNavigationReady] = useState(false);
 
   useEffect(() => {
     const getData = async () => {
@@ -167,7 +166,6 @@ const App = () => {
 
 
 
-
   const handleUpdate = () => {
     Linking.openURL('https://apps.apple.com/in/app/bme-bharat/id6739932413');
     setModalVisible(false);
@@ -181,7 +179,6 @@ const App = () => {
       setModalVisible(false);
     }
   };
-
 
 
   useEffect(() => {
@@ -520,9 +517,9 @@ const App = () => {
     checkAndClearCache();
   }, []);
 
-  useEffect(() => {
-    setupQuickActions();
-  }, []);
+  // useEffect(() => {
+  //   setupQuickActions();
+  // }, []);
 
 
   const checkAuthStatus = async () => {
@@ -551,18 +548,18 @@ const App = () => {
     }
   };
 
-  useEffect(() => {
-    setupQuickActions();
+  // useEffect(() => {
+  //   setupQuickActions();
 
-    return () => {
-      cleanupQuickActions();
-    };
-  }, []);
+  //   return () => {
+  //     cleanupQuickActions();
+  //   };
+  // }, []);
 
   useEffect(() => {
     const initializeApp = async () => {
       await checkAuthStatus();
-      setSplashVisible(false); // Hide splash screen after loading is complete
+      setSplashVisible(false); 
     };
 
     initializeApp();
@@ -595,9 +592,7 @@ const App = () => {
                   console.log('NavigationContainer onReady called');
                   onNavigationContainerReady();
                 }}
-
               >
-
                 <ConnectionProvider>
                   <BottomSheetProvider>
                     <NetworkProvider>

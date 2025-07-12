@@ -29,8 +29,6 @@ const CompanyListScreen = () => {
   const scrollViewRef = useRef(null);
   const [searchTriggered, setSearchTriggered] = useState(false);
 
-  useScrollToTop(scrollViewRef);
-
   const [loadingMore, setLoadingMore] = useState(false);
   const [lastEvaluatedKey, setLastEvaluatedKey] = useState(null);
   const [hasMoreCompanies, setHasMoreCompanies] = useState(false);
@@ -173,6 +171,7 @@ const CompanyListScreen = () => {
       const res = await withTimeout(apiClient.post('/searchCompanies', requestData), 10000);
       const companies = res?.data?.response || [];
       const count = res?.data?.count || companies.length;
+      scrollViewRef.current?.scrollToOffset({ offset: 0, animated: true });
 
       // Fetch signed URLs
       const urlPromises = companies.map(company =>

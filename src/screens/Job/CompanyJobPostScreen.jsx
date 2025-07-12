@@ -339,6 +339,10 @@ const CompanyJobPostScreen = () => {
                 placeholder="Select skills"
                 multiSelect
               />
+              {selectedSkills.length === 0 && (
+                <Text style={styles.instructionText}>You can select up to 3 skills</Text>
+              )}
+              {renderSelectedItems(selectedSkills, removeSkill)}
               {renderSelectedItems(selectedSkills, removeSkill)}
             </View>
 
@@ -394,6 +398,10 @@ const CompanyJobPostScreen = () => {
                 placeholder="Select cities"
                 multiSelect
               />
+                {selectedCities.length === 0 && (
+    <Text style={styles.instructionText}>You can select up to 5 cities</Text>
+  )}
+
               {renderSelectedItems(selectedCities, removeCity)}
             </View>
 
@@ -516,6 +524,12 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
+  instructionText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
 
   dropdownButton: {
     height: 50,

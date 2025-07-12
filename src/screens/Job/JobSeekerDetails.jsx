@@ -8,6 +8,7 @@ import femaleImage from '../../images/homepage/female.jpg';
 
 import ContactSupplierModal from '../helperComponents.jsx/ContactsModal';
 import { openMediaViewer } from '../helperComponents.jsx/mediaViewer';
+import ResumeModal from '../helperComponents.jsx/resumeModal';
 
 
 const CompanyGetJobCandidatesScreen = () => {
@@ -16,6 +17,7 @@ const CompanyGetJobCandidatesScreen = () => {
   const navigation = useNavigation()
   const scrollViewRef = useRef(null)
   const [modalVisible1, setModalVisible1] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
 
 
   useFocusEffect(
@@ -39,130 +41,136 @@ const CompanyGetJobCandidatesScreen = () => {
       </View>
 
 
-      <ScrollView showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15 }} 
-      showsVerticalScrollIndicator={false} ref={scrollViewRef} >
- 
-          <View style={styles.imageContainer}>
-            {imageUrl ? (
-              <TouchableOpacity onPress={() => openMediaViewer([{ type: 'image', url: imageUrl }])} activeOpacity={0.8}>
-                <Image
-                  source={{ uri: imageUrl }}
-                  style={styles.image}
-                  resizeMode="cover"
-                  onError={(e) => console.error("Image load error:", e.nativeEvent.error)}
-                />
-              </TouchableOpacity>
-            ) : (
+      <ScrollView showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15 }}
+        showsVerticalScrollIndicator={false} ref={scrollViewRef} >
+
+        <View style={styles.imageContainer}>
+          {imageUrl ? (
+            <TouchableOpacity onPress={() => openMediaViewer([{ type: 'image', url: imageUrl }])} activeOpacity={0.8}>
               <Image
-                source={posts.gender === "Male" ? maleImage : femaleImage}
+                source={{ uri: imageUrl }}
                 style={styles.image}
                 resizeMode="cover"
                 onError={(e) => console.error("Image load error:", e.nativeEvent.error)}
               />
-            )}
+            </TouchableOpacity>
+          ) : (
+            <Image
+              source={posts.gender === "Male" ? maleImage : femaleImage}
+              style={styles.image}
+              resizeMode="cover"
+              onError={(e) => console.error("Image load error:", e.nativeEvent.error)}
+            />
+          )}
+        </View>
+
+
+        <View style={styles.textContainer}>
+          <Text style={styles.name}>{`${posts.first_name || ""} ${posts.last_name || ""}`}
+          </Text>
+          <View style={styles.detail}>
+            <Text style={styles.label}>Gender</Text>
+            <Text style={styles.colon}>:</Text>
+
+            <Text style={styles.value}>{posts.gender || ""}</Text>
+          </View>
+          <View style={styles.detail}>
+            <Text style={styles.label}>Work experience</Text>
+            <Text style={styles.colon}>:</Text>
+
+            <Text style={styles.value}>{(posts.work_experience || "").trimStart().trimEnd()}</Text>
+          </View>
+          {posts.college?.trim() ? (
+            <View style={styles.detail}>
+              <Text style={styles.label}>College</Text>
+              <Text style={styles.colon}>:</Text>
+              <Text style={styles.value}>{posts.college.trim()}</Text>
+            </View>
+          ) : null}
+
+          {posts.education_qualifications?.trim() && (
+            <View style={styles.detail}>
+              <Text style={styles.label}>Educational qualification</Text>
+              <Text style={styles.colon}>:</Text>
+              <Text style={styles.value}>{posts.education_qualifications.trim()}</Text>
+            </View>
+          )}
+
+          <View style={styles.detail}>
+            <Text style={styles.label}>Expert in</Text>
+            <Text style={styles.colon}>:</Text>
+
+            <Text style={styles.value}>{(posts.expert_in || "").trimStart().trimEnd()}</Text>
+          </View>
+          <View style={styles.detail}>
+            <Text style={styles.label}>City</Text>
+            <Text style={styles.colon}>:</Text>
+
+            <Text style={styles.value}>{posts.city || ""}</Text>
+          </View>
+          <View style={styles.detail}>
+            <Text style={styles.label}>State</Text>
+            <Text style={styles.colon}>:</Text>
+
+            <Text style={styles.value}>{posts.state || ""}</Text>
           </View>
 
+          <View style={styles.detail}>
+            <Text style={styles.label}>Domain strength</Text>
+            <Text style={styles.colon}>:</Text>
 
-          <View style={styles.textContainer}>
-            <Text style={styles.name}>{`${posts.first_name || ""} ${posts.last_name || ""}`}
-            </Text>
-            <View style={styles.detail}>
-              <Text style={styles.label}>Gender</Text>
-              <Text style={styles.colon}>:</Text>
-
-              <Text style={styles.value}>{posts.gender || ""}</Text>
-            </View>
-            <View style={styles.detail}>
-              <Text style={styles.label}>Work experience</Text>
-              <Text style={styles.colon}>:</Text>
-
-              <Text style={styles.value}>{(posts.work_experience || "").trimStart().trimEnd()}</Text>
-            </View>
-            {posts.college?.trim() ? (
-              <View style={styles.detail}>
-                <Text style={styles.label}>College</Text>
-                <Text style={styles.colon}>:</Text>
-                <Text style={styles.value}>{posts.college.trim()}</Text>
-              </View>
-            ) : null}
-
-            {posts.education_qualifications?.trim() && (
-              <View style={styles.detail}>
-                <Text style={styles.label}>Educational qualification</Text>
-                <Text style={styles.colon}>:</Text>
-                <Text style={styles.value}>{posts.education_qualifications.trim()}</Text>
-              </View>
-            )}
-
-            <View style={styles.detail}>
-              <Text style={styles.label}>Expert in</Text>
-              <Text style={styles.colon}>:</Text>
-
-              <Text style={styles.value}>{(posts.expert_in || "").trimStart().trimEnd()}</Text>
-            </View>
-            <View style={styles.detail}>
-              <Text style={styles.label}>City</Text>
-              <Text style={styles.colon}>:</Text>
-
-              <Text style={styles.value}>{posts.city || ""}</Text>
-            </View>
-            <View style={styles.detail}>
-              <Text style={styles.label}>State</Text>
-              <Text style={styles.colon}>:</Text>
-
-              <Text style={styles.value}>{posts.state || ""}</Text>
-            </View>
-
-            <View style={styles.detail}>
-              <Text style={styles.label}>Domain strength</Text>
-              <Text style={styles.colon}>:</Text>
-
-              <Text style={styles.value}>{posts.domain_strength || ""}</Text>
-            </View>
-            <View style={styles.detail}>
-              <Text style={styles.label}>Industry type</Text>
-              <Text style={styles.colon}>:</Text>
-
-              <Text style={styles.value}>{posts.industry_type || ""}</Text>
-            </View>
-            {posts.languages?.trim() && (
-              <View style={styles.detail}>
-                <Text style={styles.label}>Languages known</Text>
-                <Text style={styles.colon}>:</Text>
-                <Text style={styles.value}>{posts.languages.trim()}</Text>
-              </View>
-            )}
-
-            {posts.preferred_cities?.trim() && (
-              <View style={styles.detail}>
-                <Text style={styles.label}>Preferred cities</Text>
-                <Text style={styles.colon}>:</Text>
-                <Text style={styles.value}>{posts.preferred_cities.trim()}</Text>
-              </View>
-            )}
-
-            {posts.expected_salary?.trim() && (
-              <View style={styles.detail}>
-                <Text style={styles.label}>Expected salary</Text>
-                <Text style={styles.colon}>:</Text>
-                <Text style={styles.value}>{posts.expected_salary.trim()}</Text>
-              </View>
-            )}
-
+            <Text style={styles.value}>{posts.domain_strength || ""}</Text>
           </View>
+          <View style={styles.detail}>
+            <Text style={styles.label}>Industry type</Text>
+            <Text style={styles.colon}>:</Text>
+
+            <Text style={styles.value}>{posts.industry_type || ""}</Text>
+          </View>
+          {posts.languages?.trim() && (
+            <View style={styles.detail}>
+              <Text style={styles.label}>Languages known</Text>
+              <Text style={styles.colon}>:</Text>
+              <Text style={styles.value}>{posts.languages.trim()}</Text>
+            </View>
+          )}
+
+          {posts.preferred_cities?.trim() && (
+            <View style={styles.detail}>
+              <Text style={styles.label}>Preferred cities</Text>
+              <Text style={styles.colon}>:</Text>
+              <Text style={styles.value}>{posts.preferred_cities.trim()}</Text>
+            </View>
+          )}
+
+          {posts.expected_salary?.trim() && (
+            <View style={styles.detail}>
+              <Text style={styles.label}>Expected salary</Text>
+              <Text style={styles.colon}>:</Text>
+              <Text style={styles.value}>{posts.expected_salary.trim()}</Text>
+            </View>
+          )}
+
+        </View>
 
 
-          <TouchableOpacity onPress={() => setModalVisible1(true)} style={{ padding: 10 }}>
-            <Text style={styles.contact}>Contact details</Text>
-          </TouchableOpacity>
+        <TouchableOpacity onPress={() => setModalVisible1(true)} >
+          <Text style={styles.contact}>Contact details</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setModalVisible(true)} >
+          <Text style={styles.contact}>View resume</Text>
+        </TouchableOpacity>
+        <ContactSupplierModal
+          visible={modalVisible1}
+          onClose={() => setModalVisible1(false)}
+          company_id={posts.user_id}
+        />
+        <ResumeModal
+          visible={modalVisible}
+          onClose={() => setModalVisible(false)}
+          company_id={posts.user_id}
+        />
 
-          <ContactSupplierModal
-            visible={modalVisible1}
-            onClose={() => setModalVisible1(false)}
-            company_id={posts.user_id}
-          />
-
-  
       </ScrollView>
 
     </SafeAreaView>

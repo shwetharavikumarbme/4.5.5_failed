@@ -1335,8 +1335,6 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
-  - react-native-blob-util (0.22.2):
-    - React-Core
   - react-native-compressor (1.11.0):
     - DoubleConversion
     - glog
@@ -2058,7 +2056,6 @@ DEPENDENCIES:
   - React-logger (from `../node_modules/react-native/ReactCommon/logger`)
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
-  - react-native-blob-util (from `../node_modules/react-native-blob-util`)
   - react-native-compressor (from `../node_modules/react-native-compressor`)
   - react-native-create-thumbnail (from `../node_modules/react-native-create-thumbnail`)
   - react-native-document-picker (from `../node_modules/react-native-document-picker`)
@@ -2215,8 +2212,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   React-microtasksnativemodule:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
-  react-native-blob-util:
-    :path: "../node_modules/react-native-blob-util"
   react-native-compressor:
     :path: "../node_modules/react-native-compressor"
   react-native-create-thumbnail:
@@ -2387,7 +2382,6 @@ SPEC CHECKSUMS:
   React-logger: 4072f39df335ca443932e0ccece41fbeb5ca8404
   React-Mapbuffer: a90dc2b770956814f2f2ac4553063c5ce2618fe8
   React-microtasksnativemodule: 40cde5ee77232199dec72ea853902afb929390dc
-  react-native-blob-util: 3c3dc88417b94e750c46c185662a07b2816a6b5e
   react-native-compressor: d934fd161f6be5dc2ddf1249e6319ef80682c137
   react-native-create-thumbnail: daaa5d465360c5015b02026bd0978abf16b36ea9
   react-native-document-picker: 1928548d8b19bbc9f2219b01f1d350aa8ff76508

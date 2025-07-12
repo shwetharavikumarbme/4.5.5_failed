@@ -24,7 +24,7 @@ import { fetchForumReactionsBatch, fetchForumReactionsRaw } from "../helperCompo
 
 import ReactionSheet from "../helperComponents.jsx/ReactionUserSheet";
 import { ForumBody, generateHighlightedHTML, normalizeHtml } from "./forumBody";
-import { fetchMediaForPost } from "../helperComponents.jsx/forumViewableItems";
+import { fetchMediaForPost, useForumMedia } from "../helperComponents.jsx/forumViewableItems";
 import { fetchCommentCount, fetchCommentCounts } from "../AppUtils/CommentCount";
 
 const JobListScreen = React.lazy(() => import('../Job/JobListScreen'));
@@ -32,6 +32,10 @@ const ProductsList = React.lazy(() => import('../Products/ProductsList'));
 const CompanySettingScreen = React.lazy(() => import('../Profile/CompanySettingScreen'));
 const CompanyHomeScreen = React.lazy(() => import('../CompanyHomeScreen'));
 
+const { width: deviceWidth, height: deviceHeight } = Dimensions.get('window');
+const MAX_HEIGHT = Math.floor(deviceHeight * 0.7);
+const MAX_WIDTH = deviceWidth;
+const MIN_ASPECT_RATIO = 0.8; 
 
 const initialLayout = { width: Dimensions.get('window').width };
 
@@ -299,6 +303,9 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
   const dispatch = useDispatch();
   const navigation = useNavigation();
   const [localPosts, setLocalPosts] = useState([]);
+useEffect(()=>{
+  console.log('localPosts',localPosts[1])
+})
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeVideo, setActiveVideo] = useState(null);
@@ -337,10 +344,9 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
 
   const fetchLatestPosts = async (lastKey = null) => {
     if (!isConnected || loading || loadingMore) return;
-
-    const startTime = Date.now();
+  
     lastKey ? setLoadingMore(true) : setLoading(true);
-
+  
     try {
       const requestData = {
         command: 'getAllForumPosts',
@@ -348,71 +354,120 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
         limit: fetchLimit,
         ...(lastKey && { lastEvaluatedKey: lastKey }),
       };
-
+  
       const response = await withTimeout(
         apiClient.post('/getAllForumPosts', requestData),
         10000
       );
-
+  
       const newPosts = response?.data?.response || [];
-
       if (!newPosts.length) {
         setHasMorePosts(false);
         return;
       }
-
-      // Adjust fetchLimit based on response speed
-      const responseTime = Date.now() - startTime;
-      if (responseTime < 500) setFetchLimit(prev => Math.min(prev + 2, 10));
-      else if (responseTime > 1200) setFetchLimit(prev => Math.max(prev - 1, 3));
-
-      const sortedNewPosts = newPosts.sort((a, b) => b.posted_on - a.posted_on);
-      const forumIds = sortedNewPosts.map(p => p.forum_id);
-
-      const [postsWithMedia, reactionMap, commentCountsArray] = await Promise.all([
-        fetchMediaForPost(sortedNewPosts),
-        fetchForumReactionsBatch(forumIds, myId),
-        Promise.all(forumIds.map(id => fetchCommentCount(id))), // ✅ updated
-      ]);
-console.log('reactionMap',reactionMap)
-      // Map comment counts to forumIds
-      const commentCounts = {};
-      forumIds.forEach((id, idx) => {
-        commentCounts[id] = commentCountsArray[idx];
-      });
-
-      const postsWithExtras = postsWithMedia.map((post) => {
-        const forumId = post.forum_id;
-        const reactions = reactionMap[forumId] || {};
-
+  
+      const enrichedPosts = newPosts.map(post => {
+        const originalWidth = post?.extraData?.width;
+        const originalHeight = post?.extraData?.height;
+      
+        if (!originalWidth || !originalHeight || originalHeight <= 0) {
+          return {
+            ...post,
+            displayWidth: MAX_WIDTH,
+            displayHeight: MAX_WIDTH,
+            aspectRatio: 1,
+            originalAspectRatio: 1,
+          };
+        }
+      
+        const originalAspectRatio = originalWidth / originalHeight;
+        let displayWidth = originalWidth;
+        let displayHeight = originalHeight;
+      
+        // First scale down to fit height
+        if (displayHeight > MAX_HEIGHT) {
+          displayHeight = MAX_HEIGHT;
+          displayWidth = displayHeight * originalAspectRatio;
+        }
+      
+        // Then check if width is too wide
+        if (displayWidth > MAX_WIDTH) {
+          displayWidth = MAX_WIDTH;
+          displayHeight = displayWidth / originalAspectRatio;
+        }
+      
+        // Now force aspect ratio if it's too narrow (too tall)
+        let finalAspectRatio = displayWidth / displayHeight;
+        if (finalAspectRatio < MIN_ASPECT_RATIO) {
+          finalAspectRatio = MIN_ASPECT_RATIO;
+          displayWidth = MAX_WIDTH;
+          displayHeight = displayWidth / finalAspectRatio;
+        }
+      
+        console.log('[DEBUG] forum_id:', post.forum_id, {
+          originalWidth,
+          originalHeight,
+          originalAspectRatio,
+          displayWidth,
+          displayHeight,
+          finalAspectRatio,
+        });
+      
         return {
           ...post,
-          commentCount: commentCounts[forumId] || 0,
-          reactionsCount: reactions.reactionsCount || {},
-          totalReactions: reactions.totalReactions || 0,
-          userReaction: reactions.userReaction || null,
+          displayWidth,
+          displayHeight,
+          aspectRatio: finalAspectRatio,
+          originalAspectRatio,
         };
       });
-
-
-
+      
+      
+  
+      // Deduplicate and update state
       setLocalPosts(prev => {
-        const combined = [...prev, ...postsWithExtras];
-        const unique = combined.filter(
-          (p, i, arr) => i === arr.findIndex(pp => pp.forum_id === p.forum_id)
+        const combined = [...prev, ...enrichedPosts];
+        return combined.filter(
+          (post, index, self) =>
+            index === self.findIndex(p => p.forum_id === post.forum_id)
         );
-        return unique;
       });
-
+  
+      // Preload initial media (optimization)
+      if (!lastKey) {
+        preloadMediaUrls(enrichedPosts.slice(0, 4));
+      }
+  
+      // Pagination control
       setHasMorePosts(!!response.data.lastEvaluatedKey);
       setLastEvaluatedKey(response.data.lastEvaluatedKey || null);
+  
     } catch (error) {
-
+      console.error('Error fetching posts:', error);
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
   };
+
+
+
+const {
+  getMediaForItem,
+  getAuthorImage,
+  onViewableItemsChanged: mediaViewabilityChanged,
+  viewabilityConfig: mediaViewabilityConfig,
+  preloadUrls: preloadMediaUrls
+} = useForumMedia(localPosts);
+
+
+
+  // Combine with your existing viewability handler
+  const combinedOnViewableItemsChanged = useCallback((info) => {
+    mediaViewabilityChanged(info);
+    onViewableItemsChanged(info); // Now correctly calling the function
+  }, [mediaViewabilityChanged, onViewableItemsChanged]);
+
 
 
 
@@ -526,36 +581,32 @@ console.log('reactionMap',reactionMap)
 
 
 
-  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+// Change this from useRef to useCallback
+const onViewableItemsChanged = useCallback(({ viewableItems }) => {
+  if (!isFocused) {
+    setActiveVideo(null);
+    return;
+  }
 
-    if (!isFocused) {
-      setActiveVideo(null);
-      return;
-    }
+  const visibleItem = viewableItems.find(item => item.isViewable);
 
-    const visibleItem = viewableItems.find(item => item.isViewable);
+  if (visibleItem) {
+    const forumId = visibleItem.item.forum_id;
 
-    if (visibleItem) {
-      const forumId = visibleItem.item.forum_id;
-
-      // Still only auto-play video if there's a video
-      if (visibleItem.item.videoUrl) {
-        setActiveVideo(forumId);
-      } else {
-        setActiveVideo(null);
-      }
-
-      if (forumId && !viewedForumIdsRef.current.has(forumId)) {
-
-        viewedForumIdsRef.current.add(forumId);
-        incrementViewCount(forumId);
-      } else {
-
-      }
+    if (visibleItem.item.videoUrl) {
+      setActiveVideo(forumId);
     } else {
       setActiveVideo(null);
     }
-  }).current;
+
+    if (forumId && !viewedForumIdsRef.current.has(forumId)) {
+      viewedForumIdsRef.current.add(forumId);
+      incrementViewCount(forumId);
+    }
+  } else {
+    setActiveVideo(null);
+  }
+}, [isFocused]);
 
 
 
@@ -667,6 +718,17 @@ console.log('reactionMap',reactionMap)
   const { height: screenHeight } = Dimensions.get('window');
 
   const renderItem = useCallback(({ item }) => {
+    const mediaData = getMediaForItem(item);
+    const authorImageUrl = getAuthorImage(item);
+    
+    // Combine with existing item data
+    const combinedItem = {
+      ...item,
+      ...mediaData,
+      authorImageUrl
+    };
+  console.log('mediaData',mediaData)
+  console.log('authorImageUrl',authorImageUrl)
 
     // console.log('Render', item.forum_id, item.totalReactions, item.userReaction);
     return (
@@ -676,7 +738,7 @@ console.log('reactionMap',reactionMap)
           <TouchableOpacity style={styles.dpContainer1} onPress={() => handleNavigate(item)}
             activeOpacity={0.8}>
             <FastImage
-              source={item.authorImageUrl ? { uri: item.authorImageUrl } : null}
+              source={combinedItem.authorImageUrl ? { uri: combinedItem.authorImageUrl } : null}
               style={styles.image1}
               onError={() => {
                 // Optional error handling
@@ -713,53 +775,57 @@ console.log('reactionMap',reactionMap)
             toggleFullText={toggleFullText}
           />
         </View>
-        {item.videoUrl ? (
-          <TouchableOpacity activeOpacity={1} >
-            <Video
-              ref={(ref) => {
-                if (ref) {
-                  videoRefs[item.forum_id] = ref;
-                } else {
-                  delete videoRefs[item.forum_id];
-                }
-              }}
-              source={{ uri: item.videoUrl }}
-              style={{
-                width: '100%',
-                aspectRatio: item.aspectRatio || 16 / 9,
-                marginVertical: 5
-              }}
-              controls
-              paused={!isTabActive || activeVideo !== item.forum_id}
-              resizeMode="contain"
-              poster={item.thumbnailUrl}
-              repeat
-              posterResizeMode="cover"
-            />
+        {item.fileKey ? (
+          <TouchableOpacity activeOpacity={1} style={{borderRadius:6, overflow:'hidden',marginTop:10}}>
+  {(() => {
+    const ratio = item.aspectRatio;
+    const isValid = typeof ratio === 'number' && isFinite(ratio) && ratio > 0;
+    const height = isValid ? Math.round(deviceWidth / ratio) : 250;
+
+    const hasVideo = !!mediaData?.videoUrl;
+    const hasImage = !!mediaData?.imageUrl;
+
+    return (
+      <View style={{ width: '100%', height, }}>
+        {hasVideo ? (
+          <Video
+            source={{ uri: mediaData.videoUrl }}
+            ref={ref => {
+              if (ref) {
+                videoRefs[item.forum_id] = ref;
+              } else {
+                delete videoRefs[item.forum_id];
+              }
+            }}
+            style={{ width: '100%', height: '100%' }}
+            controls
+            paused={!isTabActive || activeVideo !== item.forum_id}
+            resizeMode="cover"
+            poster={mediaData.thumbnailUrl || undefined}
+            posterResizeMode="cover"
+            repeat
+          />
+        ) : hasImage ? (
+          <TouchableOpacity onPress={() => openMediaViewer([{ type: 'image', url: mediaData.imageUrl }])}
+          activeOpacity={1} >
+          <FastImage
+            source={{
+              uri: mediaData.imageUrl,
+              priority: FastImage.priority.high,
+              cache: FastImage.cacheControl.immutable
+            }}
+            style={{ width: '100%', height: '100%', }}
+            resizeMode={FastImage.resizeMode.cover}
+          />
           </TouchableOpacity>
+        ) : null}
+      </View>
+    );
+  })()}
+</TouchableOpacity>
 
-        ) : (
-          item.imageUrl && (
-            <TouchableOpacity onPress={() => openMediaViewer([{ type: 'image', url: item.imageUrl }])}
-              activeOpacity={1} >
-              <FastImage
-                source={{
-                  uri: item.imageUrl,
-                  priority: FastImage.priority.high,
-                  cache: FastImage.cacheControl.immutable
-                }}
-                style={{
-                  width: '100%',
-                  aspectRatio: item.aspectRatio || 1,
-                  marginVertical: 5
+) : null}
 
-                }}
-                resizeMode={FastImage.resizeMode.contain}
-              />
-            </TouchableOpacity>
-
-          )
-        )}
 
 
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, height: 40, alignItems: 'center', }}>
@@ -938,7 +1004,7 @@ console.log('reactionMap',reactionMap)
       </View>
 
     );
-  }, [localPosts, activeVideo, expandedTexts, activeReactionForumId, isTabActive]);
+  }, [localPosts, activeVideo, expandedTexts, activeReactionForumId, isTabActive,getMediaForItem, getAuthorImage]);
 
 
   const lastCheckedTimeRef = useRef(Math.floor(Date.now() / 1000));
@@ -1324,8 +1390,13 @@ console.log('reactionMap',reactionMap)
               scrollEventThrottle={16}
 
               keyExtractor={(item, index) => `${item.forum_id}-${index}`}
-              onViewableItemsChanged={onViewableItemsChanged}
-              viewabilityConfig={viewabilityConfig}
+              onViewableItemsChanged={combinedOnViewableItemsChanged}
+              viewabilityConfig={{
+                ...mediaViewabilityConfig,
+                ...viewabilityConfig
+              }}
+            
+            
               refreshControl={
                 <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
               }

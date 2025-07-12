@@ -91,6 +91,7 @@ const CompanyListJobCandidates = () => {
 
       };
       const res = await withTimeout(apiClient.post('/searchJobProfiles', requestData), 10000);
+      scrollViewRef.current?.scrollToOffset({ offset: 0, animated: true });
 
       const jobs = res.data.response || [];
 
@@ -218,11 +219,6 @@ const CompanyListJobCandidates = () => {
   };
 
 
-
-
-
-
-
   useEffect(() => {
     fetchJobs()
   }, [])
@@ -230,8 +226,6 @@ const CompanyListJobCandidates = () => {
   const searchInputRef = useRef(null);
 
 
-  useScrollToTop(scrollViewRef);
-  // Separate renderJob function
   const renderJob = ({ item }) => {
     const imageUrl = imageUrls[item.user_id];
 

@@ -373,7 +373,7 @@ const YourResourcesList = ({ navigation, route }) => {
 
     const rawHtml = (item.resource_body || '').trim();
     const rawTitle = (item.title || '').trim();
-    
+
     const hasTitleTags = /<\/?[a-z][\s\S]*>/i.test(rawTitle);
     const forumTitleHtml = hasTitleTags ? rawTitle : `<p>${rawTitle}</p>`;
 
@@ -417,17 +417,17 @@ const YourResourcesList = ({ navigation, route }) => {
           <View style={styles.textContainer}>
             <View style={styles.productDetails}>
 
-            <Text numberOfLines={1} style={styles.value}>{(item.title || "")}</Text>
+              <Text numberOfLines={1} style={styles.value}>{(item.title || "")}</Text>
 
-            <MyPostBody
-              html={forumBodyHtml}
-              forumId={item.resource_id}
-              numberOfLines={2}
-            />
-              <Text style={styles.value}>{formattedDate || ""}</Text>
+              <MyPostBody
+                html={item.resource_body}
+                forumId={item.resource_id}
+                numberOfLines={2}
+              />
             </View>
 
-    
+
+            <Text style={styles.value}>{formattedDate || ""}</Text>
 
             <View style={styles.buttonContainer}>
               <TouchableOpacity style={styles.editButton} onPress={() => handleEditPress(item, fileUrl)}>

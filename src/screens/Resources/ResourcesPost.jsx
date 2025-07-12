@@ -56,7 +56,7 @@ const ResourcesPost = () => {
   const [fileType, setFileType] = useState('');
   const [loading, setLoading] = useState(false);
   const [thumbnailUri, setThumbnailUri] = useState(null);
-
+  const [mediaMeta, setMediaMeta] = useState(null);
 
 
   useEffect(() => {
@@ -108,14 +108,10 @@ const ResourcesPost = () => {
     setIsFormValid(isValid);
   }, [postData.body, postData.title]);
 
-  const titleEditorRef = useRef();
+
   const bodyEditorRef = useRef();
   const [activeEditor, setActiveEditor] = useState('title'); // not 'title'
 
-  const handleTitleFocus = () => {
-    setActiveEditor('title');
-    titleEditorRef.current?.focus(); // Focus the title editor
-  };
 
   const handleBodyFocus = () => {
     setActiveEditor('body');
@@ -285,8 +281,8 @@ const ResourcesPost = () => {
   const playIcon = require('../../images/homepage/PlayIcon.png');
 
 
-  const handleVideoPick = () => {
-    selectVideo({
+  const handleVideoPick = async () => {
+    const videoMeta = await selectVideo({
       isCompressing,
       setIsCompressing,
       setThumbnailUri,
@@ -294,6 +290,7 @@ const ResourcesPost = () => {
       setFile,
       setFileType,
       overlayRef,
+      setMediaMeta, // Add this
     });
   };
 
@@ -706,7 +703,7 @@ const ResourcesPost = () => {
       </View>
 
       <KeyboardAwareScrollView
-        contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 10, }}
+        contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 10,paddingBottom:'20%' }}
         keyboardShouldPersistTaps="handled"
         extraScrollHeight={20}
         showsVerticalScrollIndicator={false}
@@ -836,6 +833,7 @@ const ResourcesPost = () => {
                       style={{ width: '100%', height: '100%' }}
                       resizeMode="contain"
                       muted
+                      controls
                     />
                   </View>
                 )}

@@ -184,20 +184,22 @@ const ProductsList = () => {
 
     const applyFilters = () => {
         const selectedCategoryKeys = Object.keys(tempSelectedCategories).filter((key) => tempSelectedCategories[key]);
-
+    
         setIsFilterOpen(false);
-
+    
+        // Clear search query when applying filters
+        setSearchQuery('');
+    
         if (selectedCategoryKeys.length === 0) {
             return;
         }
-
-        setSearchResults([]); // clear old
+    
+        setSearchResults([]);
         setSearchTriggered(false);
-
-        setSelectedCategories(tempSelectedCategories); // apply
-        handleSearch(searchQuery || '', tempSelectedCategories);
+    
+        setSelectedCategories(tempSelectedCategories);
+        handleSearch('', tempSelectedCategories); // Pass empty string for text query
     };
-
 
 
 
@@ -326,24 +328,29 @@ const ProductsList = () => {
 
     const handleDebouncedTextChange = useCallback((text) => {
         setSearchQuery(text);
-
+    
         if (debounceTimeout.current) {
             clearTimeout(debounceTimeout.current);
         }
-
+    
         debounceTimeout.current = setTimeout(() => {
             const trimmedText = text.trim();
-            const hasFilters = Object.values(selectedCategories).some(Boolean);
-
-            const shouldSearch = trimmedText !== '' || hasFilters;
-
+            
+            // Clear categories if text search is active
+            if (trimmedText !== '') {
+                setSelectedCategories({});
+                setTempSelectedCategories({});
+            }
+    
+            const shouldSearch = trimmedText !== '' || Object.values(selectedCategories).some(Boolean);
+    
             if (!shouldSearch) {
                 setSearchTriggered(false);
                 setSearchResults([]);
                 return;
             }
-
-            handleSearch(trimmedText, selectedCategories);
+    
+            handleSearch(trimmedText, trimmedText !== '' ? {} : selectedCategories);
         }, 300);
     }, [handleSearch, selectedCategories]);
 
@@ -363,36 +370,44 @@ const ProductsList = () => {
             showToast('No internet connection', 'error');
             return;
         }
-
+    
         setSearchQuery(text);
-
+    
         const isTextEmpty = text.trim() === '';
         const selectedCategoryKeys = Object.keys(selectedCategories).filter(
             (key) => selectedCategories[key]
         );
-
+    
+        // If both search text and filters are empty, reset search
         if (isTextEmpty && selectedCategoryKeys.length === 0) {
             setSearchTriggered(false);
             setSearchResults([]);
             return;
         }
-
+    
+        // Determine which search mode to use (text or categories, but not both)
+        const searchMode = !isTextEmpty ? 'text' : 
+                         selectedCategoryKeys.length > 0 ? 'categories' : 
+                         null;
+    
         const requestData = {
             command: 'searchProducts',
-            searchQuery: text.trim(),
-            categories: selectedCategoryKeys.length > 0 ? selectedCategoryKeys : undefined,
+            // Only include searchQuery if we're in text mode
+            ...(searchMode === 'text' && { searchQuery: text.trim() }),
+            // Only include categories if we're in categories mode
+            ...(searchMode === 'categories' && { categories: selectedCategoryKeys }),
         };
-
+    
         try {
             const res = await withTimeout(apiClient.post('/searchProducts', requestData), 10000);
             const products = res?.data?.response || [];
-
+    
             flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
             
             setSearchResults(products);
             setLastEvaluatedKey(null);
             fetchProductImageUrls(products);
-
+    
         } catch (error) {
             console.error('[handleSearch] Error occurred during product search:', error);
             showToast('Something went wrong. Please try again.', 'error');
@@ -586,7 +601,7 @@ const ProductsList = () => {
                                         {searchTriggered ? `${searchResults.length} products found` : `${companyCount} products found`}
                                     </Text>
 
-                                    {searchTriggered && searchResults.length > 0 && (
+                                    {searchQuery && (
                                         <Text style={styles.companyCount}>
                                             Showing results for{" "}
                                             <Text style={{ fontSize: 18, fontWeight: '600', color: '#075cab' }}>
@@ -729,7 +744,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 12,
         paddingBottom: 15,
-        backgroundColor: '#ffffff',
+        backgroundColor: '#fff',
         position: 'absolute',
         bottom: 0,
         left: 0,

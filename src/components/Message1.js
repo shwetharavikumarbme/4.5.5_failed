@@ -1,26 +1,31 @@
 import React from 'react';
-import { Modal, Text, TouchableOpacity, View, StyleSheet } from 'react-native';
+import { Modal, Text, TouchableOpacity, View, StyleSheet, Dimensions } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-const Message1 = ({ visible, onClose, onOk, title, message, iconType }) => {
+const { width } = Dimensions.get('window');
 
+const Message1 = ({ visible, onClose, onOk, title, message, iconType }) => {
   const getIcon = () => {
+    const iconProps = {
+      size: 50,
+      style: styles.icon
+    };
+
     switch (iconType) {
       case 'success':
-        return <Icon name="check-circle" size={60} color="green" />;
+        return <Icon name="check-circle" {...iconProps} color="#4CAF50" />;
       case 'warning':
-        return <Icon name="alert-circle" size={50} color="#3498db" />;
+        return <Icon name="alert-circle" {...iconProps} color="#FF9800" />;
       case 'info':
-        return <Icon name="information" size={60} color="#3498db" />;
+        return <Icon name="information" {...iconProps} color="#2196F3" />;
       case 'congratulations':
-        return <Icon name="trophy-award" size={60} color="#FFD700" />;
+        return <Icon name="trophy-award" {...iconProps} color="#FFC107" />;
       case 'logout':
-        return <Icon name="logout" size={60} color="#FFD700" />;
+        return <Icon name="logout" {...iconProps} color="#F44336" />;
       default:
-        return <Icon name="help-circle" size={60} color="gray" />;
+        return <Icon name="help-circle" {...iconProps} color="#9E9E9E" />;
     }
   };
-  
 
   return (
     <Modal
@@ -31,21 +36,27 @@ const Message1 = ({ visible, onClose, onOk, title, message, iconType }) => {
     >
       <View style={styles.overlay}>
         <View style={styles.alertBox}>
-          {/* Icon based on iconType */}
+          {/* Icon */}
           <View style={styles.iconContainer}>
             {getIcon()}
           </View>
 
           {/* Title */}
-          <Text style={styles.title}>{title}</Text>
+          {title && <Text style={styles.title}>{title}</Text>}
 
           {/* Message */}
           <Text style={styles.message}>{message}</Text>
 
-          {/* OK Button */}
-          <TouchableOpacity onPress={onOk} style={styles.okButton}>
-            <Text style={styles.buttonText}>OK</Text>
-          </TouchableOpacity>
+          {/* Button Container */}
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity 
+              onPress={onOk} 
+              style={[styles.button, styles.okButton]}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.buttonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -57,58 +68,71 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 20
   },
   alertBox: {
-    width: 320,
-    paddingVertical: 30,
-    paddingHorizontal: 25,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 15,
+    width: width - 40,
+    maxWidth: 400,
+    padding: 25,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 7,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5
   },
   iconContainer: {
-    marginBottom: 20,
-    
-  
+    marginBottom: 15,
+    padding: 10,
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    borderRadius: 50,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'center'
+  },
+  icon: {
+    marginBottom: -3
   },
   title: {
-    fontSize: 22,
-    fontWeight: '500',
+    fontSize: 20,
+    fontWeight: '600',
     color: '#333',
-    marginBottom: 12,
-    textAlign: 'justify', // Centered message
+    marginBottom: 10,
+    textAlign: 'center',
+    lineHeight: 24
   },
   message: {
-    fontSize: 16,
-    color: 'black',
+    fontSize: 14,
+    color: '#555',
     marginBottom: 20,
-    textAlign: 'justify', // Centered message
-    fontWeight: '400',
-    lineHeight: 23,
+    textAlign: 'center',
+    fontWeight: '600',
+    lineHeight: 22
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    width: '100%'
+  },
+  button: {
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+    minWidth: 120,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   okButton: {
-    backgroundColor: '#3498db',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 14,
-    marginTop: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#075cab',
   },
   buttonText: {
-    fontSize: 18,
-    color: 'white',
-    fontWeight: '600',
-  },
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '500',
+    letterSpacing: 0.5
+  }
 });
 
 export default Message1;

@@ -279,13 +279,19 @@ const CommentsSection = forwardRef(({ forum_id, currentUserId, onEditComment, hi
                 user_id: currentUserId,
                 comment_id: commentId,
             });
-
+    
             if (response.data.status === 'success') {
                 showToast("Comment deleted", 'success');
-
+    
                 setComments(prevComments => prevComments.filter(comment => comment.comment_id !== commentId));
-                EventRegister.emit('onCommentDeleted', { forum_id: forum_id });
-
+                EventRegister.emit('onCommentDeleted', { 
+                    forum_id: forum_id,
+                    comment_id: commentId  // Add this to notify which comment was deleted
+                });
+    
+                // If we're deleting the comment that's currently being edited
+                EventRegister.emit('onEditCommentCancelled');
+                
                 setDropdownVisible({});
             } else {
                 alert('Failed to delete comment. Please try again.');
@@ -524,33 +530,32 @@ const styles = StyleSheet.create({
     },
 
     imageContainer: {
-        marginRight: 15,
-
+        marginRight: 10,
     },
 
     profileIcon: {
-        width: 40,
-        height: 40,
+        width: 35,
+        height: 35,
         borderRadius: 20,
         backgroundColor: '#eee',
     },
 
     commentContent: {
         flex: 1,
-
     },
 
     authorRow: {
         flexDirection: 'row',
         // justifyContent: 'space-between',
         alignItems: 'center',
+
     },
 
     authorText: {
         fontWeight: 'bold',
         fontSize: 14,
         maxWidth: '70%',
-        padding: 2
+        paddingHorizontal: 2
     },
 
     timestampText: {
@@ -571,8 +576,10 @@ const styles = StyleSheet.create({
     },
 
     commentText: {
-        marginTop: 4,
+        marginTop: 2,
         fontSize: 14,
+        paddingHorizontal: 2
+
     },
 
     buttonContainer: {

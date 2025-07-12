@@ -479,35 +479,35 @@ const LoginTimeUserSubscriptionScreen = () => {
   };
 
   const glowAnim = useRef(new Animated.Value(0)).current;
-  
-    useEffect(() => {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, {
-            toValue: 1,
-            duration: 1000,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 0,
-            duration: 1000,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    }, []);
-  
-    const animatedScale = glowAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [1, 1.2],
-    });
-  
-    const animatedOpacity = glowAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0.85, 1],
-    });
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 1000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0,
+          duration: 1000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  const animatedScale = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.2],
+  });
+
+  const animatedOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.85, 1],
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -698,8 +698,15 @@ const LoginTimeUserSubscriptionScreen = () => {
               <View style={styles.recommendModalContent}>
                 <TouchableOpacity
                   style={styles.closeIcon}
-                  onPress={() => setShowRecommendedModal(false)}
-                >
+                  // onPress={() => setShowRecommendedModal(false)}
+
+                  onPress={() => {
+                    setShowRecommendedModal(false);
+                    setTimeout(() => {
+                      initiatePayment(selectedPackage);
+                    }, 300);
+
+                  }}>
                   <Icon name="close" size={22} color="#444" />
                 </TouchableOpacity>
 

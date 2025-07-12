@@ -967,6 +967,7 @@ const ForumEditScreen = () => {
                       <Video
                         source={{ uri: selectedMedia.uri }}
                         style={styles.mediaPreview}
+                        muted
                         controls
                         resizeMode="contain"
                       />
@@ -1163,7 +1164,7 @@ const styles = StyleSheet.create({
     borderColor: 'gray',
     borderStyle: 'dotted',
     backgroundColor: 'white',
-    borderRadius: 15
+    borderRadius: 15,
   },
   inputContainer: {
     color: "black",

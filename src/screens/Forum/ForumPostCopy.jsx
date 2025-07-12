@@ -41,7 +41,7 @@ const videoExtensions = [
 ];
 
 
-const ForumPostScreenCopy = () => {
+const ForumPostScreen = () => {
   const dispatch = useDispatch();
   const profile = useSelector(state => state.CompanyProfile.profile);
   const { myId, myData } = useNetwork();
@@ -245,13 +245,10 @@ const ForumPostScreenCopy = () => {
       setFile,
       setFileType,
       overlayRef,
+      setMediaMeta, // Add this
     });
-  
-    if (videoMeta) {
-      setMediaMeta(videoMeta); // ✅ replace setImageMeta
-    }
   };
-  
+
 
 
 
@@ -410,94 +407,83 @@ const ForumPostScreenCopy = () => {
       showToast("Leading spaces are not allowed", 'error');
       return match.trimStart();
     });
-  
+
     const sanitizedHtml = cleanForumHtml(cleanedHtml);
-  
+
     setPostData((prev) => ({ ...prev, body: sanitizedHtml }));
   };
-  
+
 
 
   const handlePostSubmission = async () => {
     if (loading) return;
-  
+
     setHasChanges(true);
     setLoading(true);
-  
+
     try {
       setHasChanges(false);
-  
+
       const sanitizedBody = cleanForumHtml(postData.body);
+
       const plainText = stripHtmlTags(sanitizedBody);
-      
       if (!plainText.trim()) {
         showToast("Description is mandatory", "info");
         return;
       }
-  
+
+
       const uploadedFiles = await handleUploadFile();
       if (!uploadedFiles) throw new Error("File upload failed.");
-  
+
       const { fileKey, thumbnailFileKey } = uploadedFiles;
-  
+
       const postPayload = {
         command: "postInForum",
         user_id: myId,
-        forum_body: sanitizedBody,
+        forum_body: sanitizedBody, // ✅ cleaned before submit
         fileKey,
         thumbnail_fileKey: thumbnailFileKey,
         extraData: mediaMeta || {}
+
       };
-  
+
+      console.log('postPayload', postPayload)
       const res = await apiClient.post('/postInForum', postPayload);
-  
+
       if (res.data.status !== 'success') throw new Error("Failed to submit post.");
-  
-      // Clear all post data
-      setPostData({
-        body: '',
-        fileKey: '',
-      });
-      setFile(null);
-      setFileType('');
-      setThumbnailUri(null);
-      setCapturedThumbnailUri(null);
-      setMediaMeta(null);
-      
-      // Reset rich text editor
-      if (richText.current) {
-        richText.current.setContentHTML('');
-      }
-  
+
+      setHasChanges(false);
+
       let newPost = res.data.forum_details;
+
       newPost = {
         ...newPost,
         user_type: profile.user_type,
       };
-  
+
       EventRegister.emit('onForumPostCreated', {
         newPost: newPost,
         profile: profile,
       });
-  
+
       showToast("Forum post submitted successfully", "success");
-      
-      // Emit event to reset tab in PageView
-      EventRegister.emit('navigateToAllTab');
-      
-      // Navigate back
-      // navigation.goBack();
-  
+      navigation.goBack();
+
     } catch (error) {
       console.log("Submission error:", error);
+
       if (error?.message?.includes("Network Error")) {
         showToast("Check your internet connection", "error");
       } else if (error?.response?.data) {
+        // If API responded with a body (like validation errors)
+        console.log("API response error:", error.response.data);
         showToast(error.response.data?.message || "Something went wrong", "error");
       } else {
         showToast("Something went wrong", "error");
       }
-    } finally {
+    }
+    finally {
       setLoading(false);
       setHasChanges(false);
     }
@@ -525,58 +511,79 @@ const ForumPostScreenCopy = () => {
   return (
     <SafeAreaView style={styles.container}>
 
+      <View style={styles.headerContainer}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="close" size={24} color="black" />
+
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={handlePostSubmission}
+          style={[
+            AppStyles.buttonContainer,
+            !isFormValid || loading || isCompressing ? styles.disabledButton : null,
+          ]}
+          disabled={!isFormValid || loading || isCompressing}
+        >
+          {loading || isCompressing ? (
+            <ActivityIndicator size="small" />
+          ) : (
+            <Text style={[styles.buttonText, (!postData.body.trim()) && styles.buttonDisabledText]} >Post</Text>
+          )}
+        </TouchableOpacity>
+
+      </View>
+
+
 
       <KeyboardAwareScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
+        contentContainerStyle={{ flexGrow: 1,paddingBottom:'20%' }}
         keyboardShouldPersistTaps="handled"
         extraScrollHeight={20}
         onScrollBeginDrag={() => Keyboard.dismiss()}
 
       >
-        <TouchableOpacity activeOpacity={1}>
-          <View style={styles.profileContainer}>
-            <View style={styles.imageContainer}>
 
-              <FastImage
-                source={{ uri: profile?.imageUrl }}
-                style={styles.detailImage}
-                resizeMode={FastImage.resizeMode.cover}
-                onError={() => { }}
-              />
+        <View style={styles.profileContainer}>
+          <View style={styles.imageContainer}>
 
-            </View>
-
-            <View style={styles.profileTextContainer}>
-              <Text style={styles.profileName}>
-                {profile?.company_name
-                  ? profile.company_name
-                  : `${profile?.first_name || ''} ${profile?.last_name || ''}`}
-              </Text>
-              <Text style={styles.profileCategory}>{profile?.category}</Text>
-            </View>
+            <FastImage
+              source={{ uri: profile?.imageUrl }}
+              style={styles.detailImage}
+              resizeMode={FastImage.resizeMode.cover}
+              onError={() => { }}
+            />
 
           </View>
 
+          <View style={styles.profileTextContainer}>
+            <Text style={styles.profileName}>
+              {profile?.company_name
+                ? profile.company_name
+                : `${profile?.first_name || ''} ${profile?.last_name || ''}`}
+            </Text>
+            <Text style={styles.profileCategory}>{profile?.category}</Text>
+          </View>
+
+        </View>
 
 
-
-          <RichEditor
-            ref={richText}
-            useContainer={false}
-            style={{
-              minHeight: 250,
-              maxHeight: 400,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: '#ccc',
-              overflow: 'hidden',
-            }}
-            initialContentHTML={postData.body}
-            placeholder="Share your thoughts, questions or ideas..."
-            editorInitializedCallback={() => { }}
-            onChange={handleBodyChange}
-            editorStyle={{
-              cssText: `
+        <RichEditor
+          ref={richText}
+          useContainer={false}
+          style={{
+            minHeight: 250,
+            maxHeight: 400,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: '#ccc',
+            overflow: 'hidden',
+          }}
+          initialContentHTML={postData.body}
+          placeholder="Share your thoughts, questions or ideas..."
+          editorInitializedCallback={() => { }}
+          onChange={handleBodyChange}
+          editorStyle={{
+            cssText: `
       * {
         font-size: 15px !important;
         line-height: 20px !important;
@@ -590,103 +597,104 @@ const ForumPostScreenCopy = () => {
         margin: 0 !important;
       }
     `
-            }}
-          />
+          }}
+        />
 
 
-          <RichToolbar
-            editor={richText}
-            actions={[
-              actions.setBold,
-              actions.setItalic,
-              actions.insertBulletsList,
-              actions.insertOrderedList,
-              actions.insertLink,
-            ]}
-            iconTint="#000"
-            selectedIconTint="#075cab"
-            selectedButtonStyle={{ backgroundColor: "#eee" }}
+        <RichToolbar
+          editor={richText}
+          actions={[
+            actions.setBold,
+            actions.setItalic,
+            actions.insertBulletsList,
+            actions.insertOrderedList,
+            actions.insertLink,
+          ]}
+          iconTint="#000"
+          selectedIconTint="#075cab"
+          selectedButtonStyle={{ backgroundColor: "#eee" }}
 
-          />
-
-
-
-          {file && (
-            <View style={[styles.view, { marginTop: 30, width: '100%', height: 200, borderRadius: 8, overflow: 'hidden', }]}>
-              <TouchableOpacity onPress={clearFile} style={styles.removeMediaButton}>
-                <Ionicons name="close" size={20} color="black" />
-              </TouchableOpacity>
-
-              {fileType.startsWith('image') && (
-                <Image
-                  source={{ uri: file.uri }}
-                  style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
-                />
-              )}
-
-              {fileType.startsWith('video') && (
-                <Video
-                  source={{ uri: file.uri }}
-                  style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
-                  controls={true}
-                />
-              )}
-            </View>
-          )}
+        />
 
 
-          <PlayOverlayThumbnail
-            ref={overlayRef}
-            thumbnailUri={thumbnailUri}
-            playIcon={playIcon}
 
-          />
-
-          {!file && (
-            <TouchableOpacity
-              activeOpacity={1}
-              style={styles.uploadButton}
-              onPress={handleMediaSelection}
-            >
-              <Icon name="cloud-upload-outline" size={30} color="#000" />
-              <Text style={{ color: 'black', fontSize: 12 }}>Click to upload </Text>
-              <Text style={{ color: 'black', textAlign: 'center', fontSize: 12 }}>Supported formats JPG, PNG, WEBP, MP4 </Text>
-              <Text style={{ color: 'black', fontSize: 12, textAlign: 'center' }}>(images 5MB, videos 10MB) </Text>
-
-
-            </TouchableOpacity>
-          )}
-
-
-          <View style={AppStyles.UpdateContainer}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={[AppStyles.cancelBtn,]}>
-              <Text style={[styles.buttonTextdown, { color: '#FF0000' }]}  >Cancel</Text>
+        {file && (
+          <View style={[styles.view, { marginTop: 10, width: '100%', height: 250, borderRadius: 8, overflow: 'hidden', }]}>
+            <TouchableOpacity onPress={clearFile} style={styles.removeMediaButton}>
+              <Ionicons name="close" size={20} color="black" />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={handlePostSubmission}
-              style={[
-                AppStyles.buttonContainer1,
-                !isFormValid || loading || isCompressing ? styles.disabledButton : null,
-              ]}
-              disabled={!isFormValid || loading || isCompressing}
-            >
-              {loading || isCompressing ? (
-                <ActivityIndicator size="small" />
-              ) : (
-                <Text
-                  style={[
-                    styles.buttonText1,
-                    (!isFormValid || loading || isCompressing) && { color: '#fff' },
-                  ]}
-                >
-                  Post
-                </Text>
-              )}
-            </TouchableOpacity>
+            {fileType.startsWith('image') && (
+              <Image
+                source={{ uri: file.uri }}
+                style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
+              />
+            )}
 
+            {fileType.startsWith('video') && (
+              <Video
+                source={{ uri: file.uri }}
+                style={{ width: '100%', height: '100%', }}
+                muted
+                controls
+                resizeMode="contain"
+              />
+            )}
           </View>
-        </TouchableOpacity>
+        )}
+
+
+        <PlayOverlayThumbnail
+          ref={overlayRef}
+          thumbnailUri={thumbnailUri}
+          playIcon={playIcon}
+
+        />
+
+        {!file && (
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.uploadButton}
+            onPress={handleMediaSelection}
+          >
+            <Icon name="cloud-upload-outline" size={30} color="#000" />
+            <Text style={{ color: 'black', fontSize: 12 }}>Click to upload </Text>
+            <Text style={{ color: 'black', textAlign: 'center', fontSize: 12 }}>Supported formats JPG, PNG, WEBP, MP4 </Text>
+            <Text style={{ color: 'black', fontSize: 12, textAlign: 'center' }}>(images 5MB, videos 10MB) </Text>
+
+
+          </TouchableOpacity>
+        )}
+
+
+        <View style={AppStyles.UpdateContainer}>
+          <TouchableOpacity
+            onPress={handlePostSubmission}
+            style={[
+              AppStyles.buttonContainer1,
+              !isFormValid || loading || isCompressing ? styles.disabledButton : null,
+            ]}
+            disabled={!isFormValid || loading || isCompressing}
+          >
+            {loading || isCompressing ? (
+              <ActivityIndicator size="small" />
+            ) : (
+              <Text
+                style={[
+                  styles.buttonText1,
+                  (!isFormValid || loading || isCompressing) && { color: '#fff' },
+                ]}
+              >
+                Post
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => navigation.goBack()} style={[AppStyles.cancelBtn,]}>
+            <Text style={[styles.buttonTextdown, { color: '#FF0000' }]}  >Cancel</Text>
+          </TouchableOpacity>
+        </View>
+
       </KeyboardAwareScrollView>
 
 
@@ -829,4 +837,4 @@ const styles = StyleSheet.create({
   }
 });
 
-export default ForumPostScreenCopy;
+export default ForumPostScreen;

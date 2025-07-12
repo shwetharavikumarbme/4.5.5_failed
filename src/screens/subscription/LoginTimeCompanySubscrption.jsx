@@ -699,8 +699,15 @@ const LoginTimeCompanySubscrption = () => {
               <View style={styles.recommendModalContent}>
                 <TouchableOpacity
                   style={styles.closeIcon}
-                  onPress={() => setShowRecommendedModal(false)}
-                >
+                  // onPress={() => setShowRecommendedModal(false)}
+
+                  onPress={() => {
+                    setShowRecommendedModal(false);
+                    setTimeout(() => {
+                      initiatePayment(selectedPackage);
+                    }, 300);
+
+                  }}>
                   <Icon name="close" size={22} color="#444" />
                 </TouchableOpacity>
 
@@ -772,7 +779,6 @@ const LoginTimeCompanySubscrption = () => {
                       }, 300);
 
                     }}
-
 
                   >
                     <Text style={styles.modalButtonText}>Get Premium Plan</Text>

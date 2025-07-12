@@ -28,12 +28,12 @@ const stripInlineStyles = (domNode) => {
 };
 
 // ========== Shared styling ==========
-const baseStyle = { fontSize: 13 };
+const baseStyle = { fontSize: 15 };
 
 const defaultTextProps = {
   selectable: true,
   style: {
-    fontSize: 13,
+    fontSize: 15,
     marginTop: 0,
     marginBottom: 0,
     // fontWeight: '400',

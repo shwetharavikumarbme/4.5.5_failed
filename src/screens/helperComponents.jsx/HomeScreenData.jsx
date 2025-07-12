@@ -176,12 +176,13 @@ const useFetchData = ({ shouldFetch = false }) => {
     setIsFetchingLatestPosts(true);
   
     try {
-      const response = await apiClient.post('/getLatestPosts', {
-        command: "getLatestPosts",
-        // Type:'Latest',
+      const response = await apiClient.post('/getAllAdminForumPosts', {
+        command: "getAllAdminForumPosts",
+        Type:'Latest',
         limit: 10,
       });
       // getAllAdminForumPosts
+      // getLatestPosts
       if (response.data.status === "success") {
         const latestData = response.data.response || [];
   

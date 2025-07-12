@@ -1,9 +1,9 @@
 
 
-import React, { useRef, useState, useEffect, useCallback, memo } from 'react';
-import { SafeAreaView, View, FlatList, Image, Alert, TouchableOpacity, Text, RefreshControl, Keyboard, Modal, Animated } from 'react-native';
+import React, { useRef, useState, useEffect, } from 'react';
+import { SafeAreaView, View, FlatList, Image,  TouchableOpacity, Text, RefreshControl, Keyboard, } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation, useFocusEffect, useScrollToTop, useNavigationState } from '@react-navigation/native';
+import { useNavigation, useNavigationState } from '@react-navigation/native';
 import Video from 'react-native-video';
 import Banner01 from './Banner1';
 import Banner03 from './Banner3';
@@ -19,7 +19,6 @@ import { useConnection } from './AppUtils/ConnectionProvider';
 import { getSignedUrl, getTimeDisplayForum, getTimeDisplayHome } from './helperComponents.jsx/signedUrls';
 import { styles } from '../assets/AppStyles';
 import { ForumPostBody } from './Forum/forumBody';
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 
 const CompanySettingScreen = React.lazy(() => import('./Profile/CompanySettingScreen'));
 const ProductsList = React.lazy(() => import('./Products/ProductsList'));
@@ -57,37 +56,14 @@ const CompanyHomeScreen = React.memo(() => {
   const [unreadCount, setUnreadCount] = useState(0);
   const flatListRef = useRef(null);
   const [isProfileFetched, setIsProfileFetched] = useState(false);
-  const [activeSection, setActiveSection] = useState('jobs');
-  const scrollOffsetY = useRef(new Animated.Value(0)).current;
+  const scrollOffsetY = useRef(0);
 
-  const sectionThresholds = {
-    jobs: 234,
-    trendingPosts: 1589.6666666666667,
-    latestPosts: 3804.3333333333335,
-    products: 5815,
-    services: 7511.333333333333,
+
+  const handleScroll = (event) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    scrollOffsetY.current = offsetY;
   };
 
-
-  const handleScroll = Animated.event(
-    [{ nativeEvent: { contentOffset: { y: scrollOffsetY } } }],
-    {
-      useNativeDriver: true,
-      listener: (event) => {
-        const offsetY = event.nativeEvent.contentOffset.y;
-        console.log(offsetY)
-
-        const entries = Object.entries(sectionThresholds);
-        for (let i = entries.length - 1; i >= 0; i--) {
-          const [section, threshold] = entries[i];
-          if (offsetY >= threshold) {
-            setActiveSection(section);
-            break;
-          }
-        }
-      },
-    }
-  );
 
 
   useEffect(() => {
@@ -477,51 +453,8 @@ const CompanyHomeScreen = React.memo(() => {
     }
   };
 
-  const scrollToSection = (section) => {
-    const offset = sectionThresholds[section];
-    flatListRef.current.scrollToOffset({ offset, animated: true });
-  };
-  const sectionKeys = {
-    Jobs: 'jobs',
-    Trending: 'trendingPosts',
-    Latest: 'latestPosts',
-    Products: 'products',
-    Services: 'services',
-  };
-
-  const tabFlatListRef = useRef(null);
-  const tabLabels = Object.keys(sectionKeys); // e.g., ['Jobs', 'Trending', ...]
-  useEffect(() => {
-    const index = tabLabels.findIndex(label => sectionKeys[label] === activeSection);
-    if (index !== -1 && tabFlatListRef.current) {
-      tabFlatListRef.current.scrollToIndex({
-        index,
-        animated: true,
-        viewPosition: 0.5,
-      });
-    }
-  }, [activeSection]);
 
 
-
-  const renderTab = (label) => {
-    const section = sectionKeys[label];
-    const isActive = activeSection === section;
-
-    return (
-      <View style={styles.tabWrapper} key={label}>
-        <TouchableOpacity
-          onPress={() => scrollToSection(section)}
-          activeOpacity={0.85}
-          style={[styles.tab, isActive && styles.activeTab]}
-        >
-          <Text style={[styles.tabText, isActive && styles.activeTabText]}>
-            {label}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
 
 
   return (
@@ -565,18 +498,16 @@ const CompanyHomeScreen = React.memo(() => {
 
       </View>
 
-      <AnimatedFlatList
+      <FlatList
         showsVerticalScrollIndicator={false}
         ref={flatListRef}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        // stickyHeaderIndices={[1]}
         onScrollBeginDrag={() => Keyboard.dismiss()}
         contentContainerStyle={{ paddingBottom: '20%', backgroundColor: 'whitesmoke' }}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
         data={[
           { type: 'banner1' },
-          // { type: 'tabs' }, 
           { type: 'jobs', data: jobs },
           { type: 'banner2' },
           { type: 'trendingPosts', data: trendingPosts },
@@ -593,30 +524,6 @@ const CompanyHomeScreen = React.memo(() => {
             case 'banner1':
               return <Banner01 />;
 
-            // case 'tabs':
-            //   return (
-            //     <View style={styles.tabScrollWrapper}>
-            //       <FlatList
-            //         horizontal
-            //         ref={tabFlatListRef}
-            //         data={tabLabels}
-            //         renderItem={({ item }) => renderTab(item)}
-            //         keyExtractor={(item) => item}
-            //         showsHorizontalScrollIndicator={false}
-            //         contentContainerStyle={styles.tabListContent}
-            //         getItemLayout={(data, index) => ({
-            //           length: 90,
-            //           offset: 90 * index,
-            //           index,
-            //         })}
-            //         scrollToIndexFailed={({ index }) => {
-            //           setTimeout(() => {
-            //             tabFlatListRef.current?.scrollToIndex({ index, animated: true });
-            //           }, 200);
-            //         }}
-            //       />
-            //     </View>
-            //   );
 
             case 'jobs':
               return (
@@ -767,15 +674,15 @@ const CompanyHomeScreen = React.memo(() => {
                 const targetTab = tab.name;
 
                 if (isFocused) {
-                  // if (scrollOffsetY.current > 0) {
-                  //   flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                  if (scrollOffsetY.current > 0) {
+                    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
 
-                  //   setTimeout(() => {
-                  //     handleRefresh();
-                  //   }, 300);
-                  // } else {
-                  //   handleRefresh();
-                  // }
+                    setTimeout(() => {
+                      handleRefresh();
+                    }, 300);
+                  } else {
+                    handleRefresh();
+                  }
                 } else {
                   navigation.navigate(targetTab);
                 }

@@ -25,25 +25,25 @@ const videoExtensions = [
 
 
 const YourForumListScreen = ({ navigation, route }) => {
-  const myForums = useSelector(state => state.myForums.posts);
-  const imageUrls1 = useSelector(state => state.myForums.imageUrls);
-  
+
   const { myId, myData } = useNetwork();
 
   const [allForumPost, setAllForumPost] = useState([]);
   const [imageUrls, setImageUrls] = useState([]);
-
+  useEffect(() => {
+    console.log('allForumPost', allForumPost)
+  }, [allForumPost])
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [postToDelete, setPostToDelete] = useState(null);
   const scrollViewRef = useRef(null)
   const [fileKeyToDelete, setFileKeyToDelete] = useState(null);
   const defaultLogo = Image.resolveAssetSource(defaultImage).uri;
 
-  const dispatch = useDispatch();
 
   useEffect(() => {
 
     fetchPosts();
+
   }, []);
 
   const [loading, setLoading] = useState(false);
@@ -52,62 +52,59 @@ const YourForumListScreen = ({ navigation, route }) => {
   const [lastEvaluatedKey, setLastEvaluatedKey] = useState(null);
 
   useEffect(() => {
-    const listener = EventRegister.addEventListener('onForumPostCreated', async ({ newPost }) => {
-      console.log('🔔 Forum Post Created Event Received:', newPost);
+    const listeners = [
+      EventRegister.addEventListener('onForumPostCreated', async ({ newPost }) => {
+        try {
+          const signedUrl = await getSignedUrlForPost(newPost);
+          setAllForumPost(prev => [{
+            ...newPost,
+            signedUrl: signedUrl || defaultLogo
+          }, ...prev]);
+        } catch {
+          setAllForumPost(prev => [{
+            ...newPost,
+            signedUrl: defaultLogo
+          }, ...prev]);
+        }
+      }),
 
-      try {
-        const signedUrl = await getSignedUrlForPost(newPost, defaultLogo);
-        const postWithMedia = { ...newPost, signedUrl };
+      EventRegister.addEventListener('onForumPostDeleted', ({ forum_id }) => {
+        setAllForumPost(prev => prev.filter(post => post.forum_id !== forum_id));
+      }),
 
-        console.log('🖼️ Signed URL resolved:', signedUrl);
-        console.log('✅ Adding post to forum list (with media):', postWithMedia);
+      EventRegister.addEventListener('onForumPostUpdated', async ({ updatedPost }) => {
+        try {
+          // Only try to get signed URL if fileKey exists
+          const signedUrl = updatedPost.fileKey
+            ? await getSignedUrlForPost(updatedPost)
+            : null;
 
-        setAllForumPost((prev) => {
-          const updated = [postWithMedia, ...prev];
-          console.log('📥 Updated post list:', updated);
-          return [...updated]; // force new reference
-        });
+          setAllForumPost(prev => prev.map(post =>
+            post.forum_id === updatedPost.forum_id
+              ? {
+                ...updatedPost,
+                signedUrl: signedUrl || defaultLogo,
+                posted_on: updatedPost.posted_on // Ensure this is included
+              }
+              : post
+          ));
+        } catch {
+          setAllForumPost(prev => prev.map(post =>
+            post.forum_id === updatedPost.forum_id
+              ? {
+                ...updatedPost,
+                signedUrl: defaultLogo,
+                posted_on: updatedPost.posted_on // Ensure this is included
+              }
+              : post
+          ));
+        }
+      })
+    ];
 
-      } catch (error) {
-        console.error('⚠️ Failed to fetch media for new post:', error);
-        console.log('📝 Fallback: Adding post without media:', newPost);
+    return () => listeners.forEach(listener => EventRegister.removeEventListener(listener));
+  }, [defaultLogo]); // Add defaultLogo as dependency
 
-        setAllForumPost((prev) => {
-          const updated = [newPost, ...prev];
-          console.log('📥 Updated post list (fallback):', updated);
-          return [...updated]; // ensure new array reference
-        });
-      }
-    });
-
-    const deleteListener = EventRegister.addEventListener('onForumPostDeleted', ({ forum_id }) => {
-      console.log('❌ Post Deleted Event:', forum_id);
-
-      setAllForumPost((prev) => {
-        const updated = prev.filter((post) => post.forum_id !== forum_id);
-        console.log('🗑️ Updated list after deletion:', updated);
-        return [...updated];
-      });
-    });
-
-    const updateListener = EventRegister.addEventListener('onForumPostUpdated', ({ updatedPost }) => {
-      console.log('✏️ Post Updated Event:', updatedPost);
-
-      setAllForumPost((prev) => {
-        const updated = prev.map((post) =>
-          post.forum_id === updatedPost.forum_id ? updatedPost : post
-        );
-        console.log('🔁 Updated list after edit:', updated);
-        return [...updated];
-      });
-    });
-
-    return () => {
-      EventRegister.removeEventListener(listener);
-      EventRegister.removeEventListener(deleteListener);
-      EventRegister.removeEventListener(updateListener);
-    };
-  }, []);
 
 
   const fetchPosts = async (lastEvaluatedKey = null) => {
@@ -116,19 +113,12 @@ const YourForumListScreen = ({ navigation, route }) => {
     lastEvaluatedKey ? setLoadingMore(true) : setLoading(true);
 
     try {
-      if (!lastEvaluatedKey) {
-        setAllForumPost([]); // Clear list before fetching
-      }
-
       const requestData = {
         command: "getUsersAllForumPosts",
         user_id: myId,
         limit: 10,
+        ...(lastEvaluatedKey && { lastEvaluatedKey })
       };
-
-      if (lastEvaluatedKey) {
-        requestData.lastEvaluatedKey = lastEvaluatedKey;
-      }
 
       const response = await apiClient.post("/getUsersAllForumPosts", requestData);
 
@@ -136,19 +126,27 @@ const YourForumListScreen = ({ navigation, route }) => {
         let posts = response.data.response || [];
         posts.sort((a, b) => b.posted_on - a.posted_on);
 
-        let updatedPosts;
+        // Fetch signed URLs and add them directly to each post
+        const postsWithMedia = await Promise.all(
+          posts.map(async (post) => {
+            // For posts with fileKey, try to get signed URL
+            // For posts without fileKey, use default logo immediately
+            const signedUrl = await getSignedUrlForPost(post, defaultLogo);
+            return { ...post, signedUrl };
+          })
+        );
 
-        if (!lastEvaluatedKey) {
-          updatedPosts = posts;
-        } else {
-          const newPosts = posts.filter(
-            (post) =>
-              !allForumPost.some((existingPost) => existingPost.forum_id === post.forum_id)
-          );
-          updatedPosts = [...allForumPost, ...newPosts];
-        }
-
-        setAllForumPost(updatedPosts);
+        setAllForumPost(prev => {
+          if (!lastEvaluatedKey) {
+            return postsWithMedia;
+          } else {
+            // Filter out any duplicates that might already exist
+            const newPosts = postsWithMedia.filter(
+              post => !prev.some(p => p.forum_id === post.forum_id)
+            );
+            return [...prev, ...newPosts];
+          }
+        });
 
         // Pagination
         if (response.data.lastEvaluatedKey) {
@@ -157,30 +155,23 @@ const YourForumListScreen = ({ navigation, route }) => {
         } else {
           setHasMorePosts(false);
         }
-
-        // Fetch signed URLs
-        // Fetch signed URLs
-        const urlsObject = {};
-        await Promise.all(
-          posts.map(async (post) => {
-            urlsObject[post.forum_id] = await getSignedUrlForPost(post, defaultLogo);
-          })
-        );
-        setImageUrls(urlsObject)
-
       }
     } catch (error) {
-
+      console.error('Failed to fetch posts:', error);
       setHasError(true);
-      setAllForumPost([]);
+      if (!lastEvaluatedKey) {
+        setAllForumPost([]);
+      }
     } finally {
       setLoading(false);
       setLoadingMore(false);
-
     }
   };
 
   const getSignedUrlForPost = async (post, defaultLogo) => {
+    // If no fileKey, immediately return default logo
+    if (!post.fileKey) return defaultLogo;
+
     const fileKey = post.fileKey?.split("?")[0]?.toLowerCase() || "";
     const isVideo = videoExtensions.some((ext) => fileKey.endsWith(ext));
     const keyToFetch = isVideo ? post.thumbnail_fileKey : post.fileKey;
@@ -193,8 +184,7 @@ const YourForumListScreen = ({ navigation, route }) => {
         key: keyToFetch,
       });
 
-      const img_url = response.data;
-      return img_url ? `${img_url}?t=${Date.now()}` : defaultLogo;
+      return response.data || defaultLogo;
     } catch (error) {
       console.error("Error getting signed URL:", error);
       return defaultLogo;
@@ -276,14 +266,25 @@ const YourForumListScreen = ({ navigation, route }) => {
     const hasHtmlTags = /<\/?[a-z][\s\S]*>/i.test(rawHtml);
     const forumBodyHtml = hasHtmlTags ? rawHtml : `<p>${rawHtml}</p>`;
 
-    const imageUri = item.thumbnailUrl || imageUrls[item.forum_id] || item.imageUrl || item.signedUrl;
+    const imageUri = item.thumbnailUrl
+      || imageUrls[item.forum_id]
+      || item.imageUrl
+      || item.signedUrl;
+
+    // Add cache busting parameter based on posted_on timestamp
+    const cacheBustedUri = imageUri
+      ? `${imageUri.split('?')[0]}?t=${item.posted_on}`
+      : null;
     const hasImage = !!imageUri;
 
-    const formattedDate = new Date(item.posted_on * 1000).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    }).replace(/\//g, '/');
+    const formattedDate = item.posted_on
+      ? new Date(item.posted_on * 1000).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      }).replace(/\//g, '/')
+      : 'No date';
+
 
     return (
       <TouchableOpacity activeOpacity={1} onPress={() => {
@@ -292,15 +293,14 @@ const YourForumListScreen = ({ navigation, route }) => {
         <View style={styles.postContainer}>
           <View style={styles.imageContainer}>
             {hasImage && (
-              <FastImage
-                source={{
-                  uri: imageUri,
-                  priority: FastImage.priority.normal,
-                  cache: FastImage.cacheControl.web,
-                }}
+              <Image
+                source={{ uri: cacheBustedUri }}
                 style={styles.image}
                 resizeMode="contain"
+                onError={() => console.log('Image load error')}
               />
+
+
             )}
 
 

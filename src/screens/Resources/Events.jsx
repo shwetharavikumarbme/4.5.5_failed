@@ -95,6 +95,8 @@ const AllEvents = () => {
     }, 300);
   }, [handleSearch]);
 
+  const scrollViewRef = useRef(null);
+
   const handleSearch = async (text) => {
     const trimmedText = text.trim();
     setSearchQuery(text);
@@ -114,6 +116,7 @@ const AllEvents = () => {
 
       if (res.data.status === 'success' && Array.isArray(res.data.response)) {
         const Results = res.data.response;
+        scrollViewRef.current?.scrollToOffset({ offset: 0, animated: true });
 
         setSearchResults(Results)
         setLastKey(null);
@@ -231,7 +234,7 @@ const AllEvents = () => {
             </View>
             <Text style={[styles.colon, isExpired && styles.expiredText]}>:</Text>
             <Text style={[styles.details, isExpired && styles.expiredText]}>{highlightMatch(item.location, searchQuery)}</Text>
-            
+
           </View>
 
           <View style={styles.detailItem}>
@@ -308,6 +311,7 @@ const AllEvents = () => {
 
 
       <FlatList
+        ref={scrollViewRef}
         data={!searchTriggered || searchQuery.trim() === '' ? events : searchResults}
         renderItem={renderItem}
         keyExtractor={(item, index) => `${item.event_id}-${index}`}

@@ -146,7 +146,7 @@ const UserSubscriptionScreen = () => {
           verifyPayment(result);
 
         } catch (error) {
-          console.error('❌ Razorpay Failed:', JSON.stringify(error, null, 2));
+          // console.error('❌ Razorpay Failed:', JSON.stringify(error, null, 2));
           setModalType('failure');
           setShowModal(true);
           await deleteDueTransaction();
@@ -443,7 +443,7 @@ const UserSubscriptionScreen = () => {
                       break;
 
                     case 'failure':
-                      console.log('❌ Payment failed — modal closed (no retry triggered)');
+                      // console.log('❌ Payment failed — modal closed (no retry triggered)');
                       // No retry here intentionally — just closes modal
                       break;
 
@@ -476,7 +476,14 @@ const UserSubscriptionScreen = () => {
               <View style={styles.recommendModalContent}>
                 <TouchableOpacity
                   style={styles.closeIcon}
-                  onPress={() => setShowRecommendedModal(false)}
+                  // onPress={() => setShowRecommendedModal(false)}
+                  onPress={() => {
+                    setShowRecommendedModal(false);
+                    setTimeout(() => {
+                      initiatePayment(selectedPackage);
+                    }, 300);
+
+                  }}
                 >
                   <Icon name="close" size={22} color="#444" />
                 </TouchableOpacity>
@@ -549,7 +556,6 @@ const UserSubscriptionScreen = () => {
                       }, 300);
 
                     }}
-
 
                   >
                     <Text style={styles.modalButtonText}>Get Premium Plan</Text>

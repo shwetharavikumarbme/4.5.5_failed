@@ -139,6 +139,7 @@ const CommentScreen = ({ route }) => {
           <CommentInputBar
             storedUserId={myId}
             forum_id={forum_id}
+            item={post}
             onCommentAdded={(newCommentData) => {
               commentSectionRef.current?.handleCommentAdded(newCommentData);
             }}
@@ -176,7 +177,6 @@ const CommentScreen = ({ route }) => {
         ? defaultImageUriFemale
         : defaultImageUriMale;
   };
-
 
 
 
@@ -495,47 +495,45 @@ const CommentScreen = ({ route }) => {
             />
           </View>
           {mediaUrl ? (
-            <TouchableOpacity
-              style={styles.mediaContainer}
-              onPress={() =>
-                openMediaViewer([{ type: isVideo ? 'video' : 'image', url: mediaUrl }])
-              }
-              activeOpacity={1}
-            >
-              {isVideo ? (
-                <View style={styles.videoContainer}>
-                  <Video
-                    source={{ uri: mediaUrl }}
-                    style={styles.video}
-                    volume={1}
-                    repeat={true}
-                    paused={!isVideoPlaying}
-                    resizeMode="contain"
-                  />
-                  <TouchableOpacity style={styles.playButton} onPress={() =>
-                    openMediaViewer([{ type: isVideo ? 'video' : 'image', url: mediaUrl }])
-                  }>
-                    <Icon
-                      name={isVideoPlaying ? "pause-circle" : "play-circle"}
-                      size={50}
-                      color="white"
-                      style={{ opacity: isVideoPlaying ? 0 : 1 }}
-
-                    />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <Image
-                  source={{ uri: mediaUrl }}
-                  style={styles.image}
-                  resizeMode="contain"
-                />
-              )}
-            </TouchableOpacity>
-          ) : null}
+  <TouchableOpacity
+    style={styles.mediaContainer}
+    onPress={() => !isVideo && openMediaViewer([{ type: 'image', url: mediaUrl }])}
+    activeOpacity={1}
+  >
+    {isVideo ? (
+      <View style={styles.videoContainer}>
+        <Video
+          source={{ uri: mediaUrl }}
+          style={styles.video}
+          controls
+          repeat={true}
+          // paused={!isVideoPlaying}
+          resizeMode="contain"
+        />
+        {/* <TouchableOpacity 
+          style={styles.playButton} 
+          onPress={() => setIsVideoPlaying(!isVideoPlaying)}
+        >
+          <Icon
+            name={isVideoPlaying ? "pause-circle" : "play-circle"}
+            size={50}
+            color="white"
+            style={{ opacity: isVideoPlaying ? 0 : 1 }}
+          />
+        </TouchableOpacity> */}
+      </View>
+    ) : (
+      <Image
+        source={{ uri: mediaUrl }}
+        style={styles.image}
+        resizeMode="contain"
+      />
+    )}
+  </TouchableOpacity>
+) : null}
           <View style={styles.divider} />
 
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 10, height: 40 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 5, height: 40 }}>
             <View>
               <TouchableOpacity
                 onPress={async () => {

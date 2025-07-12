@@ -59,7 +59,7 @@ export const useForumReactionUsers = (forumId) => {
   
       let rawUsers = response.data.user_reactions || [];
       const highlightedUser = response.data.reaction_id_response || null;
-
+console.log('rawUsers',rawUsers)
       if (highlightedUser) {
         const highlightId = highlightedUser.reaction_id;
         rawUsers = rawUsers.filter((u) => u.reaction_id !== highlightId);

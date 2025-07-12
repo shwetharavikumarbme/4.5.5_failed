@@ -30,7 +30,9 @@ const CommentInputBar = ({
   forum_id,
   onCommentAdded,
   onEditComplete,
+  item
 }) => {
+
   const navigation = useNavigation();
   const { setOnRequestInputBarClose, closeSheet } = useBottomSheet();
   const inputRef = useRef(null);
@@ -39,18 +41,33 @@ const CommentInputBar = ({
   const [selectedComment, setSelectedComment] = useState(null);
   const profile = useSelector(state => state.CompanyProfile.profile);
 
-
-
   useEffect(() => {
-    const listener = EventRegister.addEventListener('onEditComment', (comment) => {
-      setSelectedComment(comment);
-      setText(comment.text || '');
-      inputRef.current?.focus();
+    const editListener = EventRegister.addEventListener('onEditComment', (comment) => {
+        setSelectedComment(comment);
+        setText(comment.text || '');
+        inputRef.current?.focus();
     });
+    
+    // Add listener for when a comment is deleted
+    const deleteListener = EventRegister.addEventListener('onCommentDeleted', ({ comment_id }) => {
+        if (selectedComment && selectedComment.comment_id === comment_id) {
+            setSelectedComment(null);
+            setText('');
+        }
+    });
+    
+    // Add listener for explicit edit cancellation
+    const cancelEditListener = EventRegister.addEventListener('onEditCommentCancelled', () => {
+        setSelectedComment(null);
+        setText('');
+    });
+
     return () => {
-      EventRegister.removeEventListener(listener);
+        EventRegister.removeEventListener(editListener);
+        EventRegister.removeEventListener(deleteListener);
+        EventRegister.removeEventListener(cancelEditListener);
     };
-  }, []);
+}, [selectedComment]);
 
 
 
@@ -212,7 +229,12 @@ const CommentInputBar = ({
           style={styles.input}
           onChangeText={setText}
           value={text}
-          placeholder="Add a comment..."
+          placeholder={
+            item?.author 
+              ? `Add a comment for ${item.author.slice(0, 15)}${item.author.length > 10 ? "..." : ""}` 
+              : "Add a comment..."
+          }
+        
           placeholderTextColor={COLOR_PLACEHOLDER}
           multiline
           accessibilityLabel="Message input"

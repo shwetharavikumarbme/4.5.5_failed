@@ -33,6 +33,7 @@ import { getApp } from '@react-native-firebase/app';
 import { showToast } from '../AppUtils/CustomToast';
 import apiClient from '../ApiClient';
 import AppStyles from '../../assets/AppStyles';
+import DeviceInfo from 'react-native-device-info';
 
 const UserSignupScreen = () => {
   const navigation = useNavigation();
@@ -275,14 +276,14 @@ const UserSignupScreen = () => {
 
   const handleImageSelection = () => {
     const hasImage = !!imageUri;
-  
+
     const options = hasImage
       ? ['Remove Image', 'Cancel']
       : ['Take Photo', 'Choose from Gallery', 'Cancel'];
-  
+
     const cancelButtonIndex = options.indexOf('Cancel');
     const destructiveButtonIndex = hasImage ? 0 : undefined;
-  
+
     ActionSheetIOS.showActionSheetWithOptions(
       {
         options,
@@ -292,7 +293,7 @@ const UserSignupScreen = () => {
       },
       (buttonIndex) => {
         const selected = options[buttonIndex];
-  
+
         if (selected === 'Remove Image') {
           handleDeleteImage();
         } else if (selected === 'Choose from Gallery') {
@@ -303,7 +304,7 @@ const UserSignupScreen = () => {
       }
     );
   };
-  
+
 
 
 
@@ -384,10 +385,26 @@ const UserSignupScreen = () => {
         }
       }
 
+      const deviceModel = await DeviceInfo.getModel(); // your existing usage
+
+      const deviceInfo = {
+        os: Platform.OS,
+        // osVersion: DeviceInfo.getSystemVersion(),
+        deviceName: await DeviceInfo.getDeviceName(),
+        model: deviceModel,
+        // brand: DeviceInfo.getBrand(),
+        appVersion: DeviceInfo.getVersion(),
+        // buildNumber: DeviceInfo.getBuildNumber(),
+        userAgent: await DeviceInfo.getUserAgent(),
+        ipAddress: await DeviceInfo.getIpAddress(),
+      };
+
       const payload = {
         command: 'createUserSession',
         user_id: userId,
         fcm_token: tokenToSend,
+        deviceInfo: deviceInfo,
+
       };
 
       const response = await axios.post(
@@ -413,7 +430,7 @@ const UserSignupScreen = () => {
     }
   };
 
-  
+
   const openCamera = () => {
     ImagePicker.openCamera({
       mediaType: 'photo',
@@ -426,28 +443,28 @@ const UserSignupScreen = () => {
       .then((image) => {
         const initialImageSize = image.size / 1024 / 1024;
         console.log(`Initial image size: ${initialImageSize.toFixed(2)} MB`);
-  
+
         const uri = image.path;
         setImageUri(uri);
         setFileUri(uri);
         setIsMediaSelection(false);
         setFileType(image.mime);
-  
+
         if (image.size < 1024 * 10) {
           console.log("Image size is less than 100KB, no compression needed.");
           return;
         }
-  
+
         ImageResizer.createResizedImage(uri, 800, 600, 'JPEG', 80)
           .then((resizedImage) => {
             const resizedImageSize = resizedImage.size / 1024 / 1024;
             console.log(`Resized image size: ${resizedImageSize.toFixed(2)} MB`);
-  
+
             if (resizedImageSize > 5) {
               showToast("Image size shouldn't exceed 5MB", 'error');
               return;
             }
-  
+
             setImageUri(resizedImage.uri);
             setFileUri(resizedImage.uri);
           })
@@ -461,7 +478,7 @@ const UserSignupScreen = () => {
         }
       });
   };
-  
+
 
   const openGallery = () => {
     ImagePicker.openPicker({
@@ -576,7 +593,7 @@ const UserSignupScreen = () => {
 
         if (uploadRes.status === 200) {
 
-          showToast("File uploaded", 'success');
+          // showToast("File uploaded", 'success');
 
           return fileKey;
         } else {
@@ -689,7 +706,15 @@ const UserSignupScreen = () => {
         }
 
         setAlertTitle('Success!');
-        setAlertMessage("Enjoy Your 30-Days Free Trial, Experience all the premium features of our app at no cost for 30 days. Dive in and explore everything we have to offer");
+        setAlertMessage(
+          <Text style={{ textAlign: 'center' }}>
+            You have successfully signed up!
+            {'\n\n'}
+            Enjoy <Text style={{ color: '#000', fontWeight: 'bold' }}>Your 30-Days Free Trial</Text>!
+            {'\n'}
+            Experience all the premium features of our app at no cost for 30 days. Dive in and explore everything we have to offer.
+          </Text>
+        );
         setAlertIconType('congratulations');
         setShowAlert(true);
       } else {
@@ -898,7 +923,7 @@ const UserSignupScreen = () => {
               if (hasNavigated) return;
               setHasNavigated(true);
               setShowAlert(false);
-              showToast('Signup successful', 'success');
+              // showToast('Signup successful', 'success');
               setTimeout(() => {
                 navigation.reset({
                   index: 0,
@@ -926,8 +951,8 @@ const UserSignupScreen = () => {
                 setOtp1(['', '', '', '', '', '']);
               }}
             >
-                       <MerticalIcon name="close" size={24} color="black" />
-  
+              <MerticalIcon name="close" size={24} color="black" />
+
             </TouchableOpacity>
 
             <Text style={styles.modalTitleemail}></Text>
@@ -1093,7 +1118,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   errorText: {
-    marginLeft: 20, color: 'firebrick', textAlign: 'center'
+    marginLeft: 20, color: 'firebrick', textAlign: 'center', fontSize: 14
   },
   modalContaineremail: {
     flex: 1,
