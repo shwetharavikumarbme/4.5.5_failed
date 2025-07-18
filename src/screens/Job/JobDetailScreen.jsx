@@ -12,6 +12,7 @@ import ContactSupplierModal from '../helperComponents.jsx/ContactsModal';
 import { showToast } from '../AppUtils/CustomToast';
 import { useNetwork } from '../AppUtils/IdProvider';
 import { openMediaViewer } from '../helperComponents.jsx/mediaViewer';
+import AppStyles from '../../assets/AppStyles';
 
 const defaultImage = Image.resolveAssetSource(default_image).uri;
 const JobDetailScreen = ({ route }) => {
@@ -382,9 +383,9 @@ const JobDetailScreen = ({ route }) => {
         </TouchableOpacity>
 
 
-        <TouchableOpacity onPress={() => shareJob(post)} style={styles.dropdownItem}>
+        <TouchableOpacity onPress={() => shareJob(post)} style={AppStyles.circle}>
           <Icon name="share" size={20} color="#075cab" style={styles.icon} />
-          <Text style={styles.dropdownText}>Share</Text>
+          <Text style={AppStyles.shareText}>Share</Text>
         </TouchableOpacity>
       </View>
 
@@ -702,53 +703,7 @@ const styles = StyleSheet.create({
     textAlign: 'left', // Align text to the left
     alignSelf: 'flex-start',
   },
-  stickyContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    backgroundColor: 'white',
-    flexDirection: 'row',
-    justifyContent: 'space-between', // Distribute the icons evenly
-    alignItems: 'center',
-    paddingHorizontal: 20,
-
-    elevation: 5, // Optional, adds shadow for Android
-  },
-
-  stickyContactButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 10,
-    backgroundColor: '#fff',
-    borderRadius: 50,
-
-  },
-  createPostButtonShare: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 10,
-    backgroundColor: '#fff',
-    borderRadius: 50,
-
-  },
-
-  dropdownText: {
-    fontSize: 16,
-    color: '#075cab',
-  },
-  applyButtonText: {
-    marginLeft: 5,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#075cab',
-    bottom: -9
-  },
-
-  icon: {
-    marginRight: 5,
-  },
+  
   textContainer1: {
     textAlign: 'center',
     padding: 10,
@@ -803,37 +758,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     alignSelf: 'flex-start',
 
-  },
-  label1: {
-    width: '35%', // Occupies 35% of the row
-    color: 'black',
-    fontWeight: '500',
-    fontSize: 15,
-    textAlign: 'justify',
-  },
-  value1: {
-    flex: 1,
-    flexShrink: 1, // Allows the text to wrap within available space
-    color: 'black',
-    fontWeight: '300',
-    fontSize: 15,
-    textAlign: 'justify',
-    marginTop: 10,
-    lineHeight: 23,
-  },
-
-
-
-  dropdownContainer1: {
-    position: 'absolute',
-    top: 45,
-    right: 19,
-    backgroundColor: 'white',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    elevation: 5,
-    zIndex: 1,
   },
 
   dropdownItem: {

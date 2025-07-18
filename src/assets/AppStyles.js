@@ -172,8 +172,8 @@ export default AppStyle = StyleSheet.create({
   },
   shareText: {
     color: '#075cab',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '500',
     paddingHorizontal: 4,
 
   },
@@ -194,6 +194,35 @@ export default AppStyle = StyleSheet.create({
 
   activeDot: {
     backgroundColor: '#000',
+  },
+
+  cardImage1: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginBottom: 20,
+    marginTop: 10,
+  },
+
+  cardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+  },
+  avatarText: {
+    fontSize: 24,
+    fontWeight: 'bold',
   },
 
 });
@@ -266,19 +295,20 @@ export const styles = StyleSheet.create({
 
   eduTitle: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '500',
     color: '#222',
     marginBottom: 6,
   },
 
   eduSubText: {
-    fontSize: 13,
+    fontSize: 15,
     color: '#555',
     marginTop: 4,
   },
 
   label: {
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '500',
     color: '#333',
   },
 
@@ -303,21 +333,16 @@ export const styles = StyleSheet.create({
   },
 
   modelText: {
-    fontSize: 13,
-    color: '#444',
-    fontWeight: '500',
+    fontSize: 15,
   },
 
   descriptionText: {
-    fontSize: 13,
-    color: '#666',
+    fontSize: 15,
     lineHeight: 18,
   },
 
   companyNameText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 15,
     marginTop: 4,
   },
 
@@ -607,7 +632,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: 12,
-    marginBottom:6
+    marginBottom: 6
   },
   authorRow: {
     flexDirection: 'row',
@@ -626,7 +651,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   badgeText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '400',
     color: '#666',
 
@@ -635,15 +660,15 @@ export const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 25,
-    backgroundColor:'#ddd',
-    marginHorizontal:12
+    backgroundColor: '#ddd',
+    marginHorizontal: 12
   },
   authorName: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '500',
     textAlign: 'center',
-    alignSelf:'flex-start'
-
+    alignSelf: 'flex-start',
+    maxWidth: 150,
   },
   articleMedia: {
     width: 80,
@@ -652,7 +677,7 @@ export const styles = StyleSheet.create({
     marginLeft: 12,
   },
   articleTime: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#666',
   },
   articleExcerpt: {
@@ -660,9 +685,36 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
   },
-  PostedLabel:{
-    paddingHorizontal:10
+  PostedLabel: {
+    paddingHorizontal: 10
 
+  },
+  cardImage1: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginBottom: 20,
+    marginTop: 10,
+  },
+
+  cardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 100,
+  },
+  avatarText: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 
 });

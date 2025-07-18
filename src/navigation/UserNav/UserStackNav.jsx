@@ -62,7 +62,6 @@ import MyEnqueries from '../../screens/Services/MyEnqueries';
 import RelatedServicesDetails from '../../screens/Services/RelatedServicesDetails';
 import EnquiryDetails from '../../screens/Services/EnquiryDetails';
 import InPrivacyPolicy from '../../screens/Bme_content/InPrivacyPolicy';
-import TrendingNav from '../../screens/Forum/TrendingNav';
 import UserHomeScreen from '../../screens/UserHomeScreen';
 import { createStackNavigator } from '@react-navigation/stack';
 import ForumPostScreenCopy from '../../screens/Forum/ForumPostCopy';
@@ -378,24 +377,7 @@ const EventsDrawer = () => (
   </Stack.Navigator>
 
 );
-const TrendingDrawer = () => (
 
-  <Stack.Navigator screenOptions={screenOptionStyle} initialRouteName='TrendingNav'>
-    <Stack.Screen name="TrendingNav" component={TrendingNav} options={screenOption} />
-    <Stack.Screen name="Home3" component={UserHomeScreen} options={screenOption} />
-    <Stack.Screen name="Comment" component={CommentScreen} options={screenOption} />
-    <Stack.Screen name="UserDetailsPage" component={UserDetailsPage} options={screenOption} />
-    <Stack.Screen name="CompanyDetailsPage" component={CompanyDetailsPage} options={screenOption} />
-    <Stack.Screen name="ServiceDetails" component={ServiceDetails} options={screenOption} />
-    <Stack.Screen name="JobDetail" component={JobDetailScreen} options={screenOption} />
-    <Stack.Screen name="ProductDetails" component={ProductDetails} options={screenOption} />
-    <Stack.Screen name="RelatedServicesDetails" component={RelatedServicesDetails} options={screenOption} />
-    <Stack.Screen name="RelatedProductDetails" component={RelatedProductDetails} options={screenOption} />
-    <Stack.Screen name="ResourceDetails" component={ResourceDetails} options={screenOption} />
-
-  </Stack.Navigator>
-
-);
 export {
   UserForumNav,
   UserJobNav,
@@ -407,5 +389,4 @@ export {
   UserProducts,
   EventsDrawer,
   CompanyServices,
-  TrendingDrawer
 };

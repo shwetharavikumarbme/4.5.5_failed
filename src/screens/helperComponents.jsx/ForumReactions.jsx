@@ -28,47 +28,34 @@ export const useFetchForumReactionsCount = (forumId, userId) => {
   return { reactionsCount, totalReactions, userReaction, fetching, fetchReactions };
 };
 
-export const fetchForumReactionsBatch = async (forumIds = [], userId) => {
-  if (!forumIds.length) return {};
 
+
+export const fetchForumReactionsRaw = async (forumId, userId) => {
   try {
-    const results = await Promise.all(
-      forumIds.map(async (forumId) => {
-        const response = await apiClient.post('/getForumReactionsCount', {
-          command: 'getForumReactionsCount',
-          forum_id: forumId,
-          user_id: userId,
-        });
+    const response = await apiClient.post('/getForumReactionsCount', {
+      command: 'getForumReactionsCount',
+      forum_id: forumId,
+      user_id: userId,
+    });
+    const data = response?.data || {};
+    const result = {
+      reactionsCount: data.reactions || {},
+      userReaction: data?.user_reaction?.reaction_type || null,
+      totalReactions: data?.total_reactions || 0,
+    };
+    return result;
 
-        const data = response.data || {};
-        return [
-          forumId,
-          {
-            reactionsCount: data.reactions || {},
-            userReaction: data?.user_reaction?.reaction_type || null,
-            totalReactions: data?.total_reactions || 0,
-          },
-        ];
-      })
-    );
-
-    return Object.fromEntries(results);
   } catch (error) {
-    console.error('[fetchForumReactionsBatch fallback] Error:', error);
-    return {};
+   
+    return {
+      reactionsCount: {},
+      userReaction: null,
+      totalReactions: 0,
+    };
   }
 };
 
-export const fetchForumReactionsRaw = async (forumId, userId) => {
-  const all = await fetchForumReactionsBatch([forumId], userId);
-  const data = all[forumId] || {};
 
-  return {
-    reactionsCount: data.reactions || {},
-    userReaction: data.userReaction || null,
-    totalReactions: data.totalReactions || 0,
-  };
-};
 
 
 export const useUpdateForumReaction = (forumId, userId, onSuccess) => {

@@ -558,11 +558,19 @@ const ForumEditScreen = () => {
   };
 
 
+  const sanitizeHtmlBody = (html) => {
+    const cleaned = cleanForumHtml(html); // your existing cleaner
 
+    return cleaned
+      .replace(/<div><br><\/div>/gi, '') // remove empty line divs
+      .replace(/<p>(&nbsp;|\s)*<\/p>/gi, '') // remove empty p tags
+      .replace(/<div>(&nbsp;|\s)*<\/div>/gi, '') // remove empty divs
+      .trim(); // trim outer whitespace
+  };
 
 
   const handlePostSubmission = async () => {
-    const cleanedBody = cleanForumHtml(postData.forum_body); // ✅ re-clean before saving
+    const cleanedBody = sanitizeHtmlBody(postData.forum_body); // ✅ re-clean before saving
 
     if (!stripHtmlTags(cleanedBody).trim()) {
       showToast("Description is mandatory", 'info');
@@ -863,15 +871,35 @@ const ForumEditScreen = () => {
       >
         <TouchableOpacity activeOpacity={1}>
           <View style={styles.profileContainer}>
-            <View style={styles.imageContainer}>
-
-              <FastImage
-                source={{ uri: profile?.imageUrl }}
-                style={styles.detailImage}
-                resizeMode={FastImage.resizeMode.cover}
-                onError={() => { }}
-              />
-            </View>
+             <View style={styles.imageContainer}>
+                  {profile?.fileKey ? (
+                    <Image
+                      source={{ uri: profile?.imageUrl }}
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        marginRight: 10,
+                      }}
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        marginRight: 10,
+                        backgroundColor: profile?.companyAvatar?.backgroundColor || '#ccc',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text style={{ color: profile?.companyAvatar?.textColor || '#000', fontWeight: 'bold' }}>
+                        {profile?.companyAvatar?.initials || '?'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
             <View style={styles.profileTextContainer}>
               <Text style={styles.profileName}>
                 {profile?.first_name || profile?.last_name
@@ -1183,7 +1211,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'black'
   },
-
+  profileCategory: {
+    fontSize: 14,
+    color: 'gray',
+  },
   backButton: {
     alignSelf: 'flex-start',
     padding: 10,

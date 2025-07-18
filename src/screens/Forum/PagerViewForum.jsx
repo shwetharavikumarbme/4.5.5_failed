@@ -1,7 +1,7 @@
 
 import { TabView, TabBar } from 'react-native-tab-view';
 import React, { useState, useEffect, useCallback, useRef, Profiler, useMemo } from "react";
-import { View, Text, FlatList, Image, TouchableOpacity, textInputRef, TextInput, Dimensions, Modal, StyleSheet, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard, SafeAreaView, ActivityIndicator, Linking, Share, Button, RefreshControl, Animated, PanResponder, ScrollView, Platform, InputAccessoryView } from "react-native";
+import { View, Text, FlatList, Image, TouchableOpacity, textInputRef, TextInput, Dimensions, Modal, StyleSheet, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard, SafeAreaView, ActivityIndicator, Linking, Share, Button, RefreshControl, Animated, PanResponder, ScrollView, Platform, InputAccessoryView, InteractionManager } from "react-native";
 import Video from "react-native-video";
 import { useFocusEffect, useNavigation, useScrollToTop } from '@react-navigation/native';
 import { useIsFocused } from "@react-navigation/native";
@@ -20,20 +20,28 @@ import { useConnection } from "../AppUtils/ConnectionProvider";
 import AppStyles from "../../assets/AppStyles";
 import { getSignedUrl, getTimeDisplay, getTimeDisplayForum } from "../helperComponents.jsx/signedUrls";
 import { openMediaViewer } from "../helperComponents.jsx/mediaViewer";
-import { fetchForumReactionsBatch, fetchForumReactionsRaw } from "../helperComponents.jsx/ForumReactions";
+import {  fetchForumReactionsRaw } from "../helperComponents.jsx/ForumReactions";
 
 import ReactionSheet from "../helperComponents.jsx/ReactionUserSheet";
 import { ForumBody, generateHighlightedHTML, normalizeHtml } from "./forumBody";
-import { fetchMediaForPost } from "../helperComponents.jsx/forumViewableItems";
+import { fetchMediaForPost, useForumMedia } from "../helperComponents.jsx/forumViewableItems";
 import { fetchCommentCount, fetchCommentCounts } from "../AppUtils/CommentCount";
+import useRenderForumItem from './useRenderForumItem';
+import { reactionConfig } from './useForumReactions';
+import useForumFetcher from './useForumFetcher';
 
 const JobListScreen = React.lazy(() => import('../Job/JobListScreen'));
 const ProductsList = React.lazy(() => import('../Products/ProductsList'));
 const CompanySettingScreen = React.lazy(() => import('../Profile/CompanySettingScreen'));
 const CompanyHomeScreen = React.lazy(() => import('../CompanyHomeScreen'));
 
+const { width: deviceWidth, height: deviceHeight } = Dimensions.get('window');
+const MAX_HEIGHT = Math.floor(deviceHeight * 0.7);
+const MAX_WIDTH = deviceWidth;
+const MIN_ASPECT_RATIO = 0.8; 
 
 const initialLayout = { width: Dimensions.get('window').width };
+const { height: screenHeight } = Dimensions.get('window');
 
 const PageView = () => {
   const navigation = useNavigation();
@@ -59,11 +67,12 @@ const PageView = () => {
 
   // Create refs to track video components in each tab
   const tabVideoRefs = useRef({
-    all: {},
-    latest: {},
-    trending: {},
-    post: {}
+    all: useRef({}),
+    latest: useRef({}),
+    trending: useRef({}),
+    post: useRef({})
   });
+  
 
   useEffect(() => {
     const listener = EventRegister.addEventListener('onForumPostCreated', ({ newPost, profile }) => {
@@ -94,12 +103,13 @@ const PageView = () => {
   };
 
   const handleTabChange = (newIndex) => {
-    // Pause videos in the previous tab before switching
-    const prevTabKey = routes[index].key;
-    pauseVideosInTab(prevTabKey);
-
-    // Update the tab index
-    setIndex(newIndex);
+    // Pause current tab videos
+    pauseVideosInTab(routes[index].key);
+    
+    InteractionManager.runAfterInteractions(() => {
+      setIndex(newIndex);
+      // Videos in new tab will auto-play based on visibility
+    });
   };
 
   const renderScene = ({ route }) => {
@@ -108,16 +118,22 @@ const PageView = () => {
         return <AllPosts
           videoRefs={tabVideoRefs.current.all}
           isTabActive={index === 0}
+          key="all"
+
         />;
       case 'latest':
         return <LatestPosts
           videoRefs={tabVideoRefs.current.latest}
           isTabActive={index === 1}
+          key="latest"
+
         />;
       case 'trending':
         return <TrendingPosts
           videoRefs={tabVideoRefs.current.trending}
           isTabActive={index === 2}
+          key="trending"
+
         />;
       // case 'post':
       //   return <ForumPostScreenCopy
@@ -224,41 +240,19 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
 
   // const storePosts = useSelector((state) => state.forum.posts);
 
-  const handleReactionUpdate = async (forumId, reactionType, item) => {
-    try {
-
-      await apiClient.post('/addOrUpdateForumReaction', {
-        command: 'addOrUpdateForumReaction',
-        forum_id: forumId,
-        user_id: myId,
-        reaction_type: reactionType,
-      });
-
-      // Emit event after successful reaction update
-      EventRegister.emit('onForumReactionUpdated', {
-        forum_id: forumId,
-        user_id: myId,
-        reaction_type: reactionType,
-        previous_reaction: item?.userReaction, // Now item is passed as parameter
-      });
-
-    } catch (err) {
-      console.error('[Reaction Submit] Failed to update reaction:', err);
-    }
-  };
 
 
   useEffect(() => {
     const reactionListener = EventRegister.addEventListener(
       'onForumReactionUpdated',
       ({ forum_id, reaction_type }) => {
-        console.log('[Reaction Event] Received:', { forum_id, reaction_type });
+     
+        if (!isFocused) return;
 
         setLocalPosts(prev => {
           return prev.map(post => {
             if (post.forum_id !== forum_id) return post;
 
-            console.log('[Reaction Update] Updating post:', post.forum_id);
 
             let newTotal = Number(post.totalReactions || 0);
             let newReaction = reaction_type;
@@ -273,7 +267,7 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
               newTotal += 1;
             } else if (oldReaction !== reaction_type) {
               // Reaction changed (e.g., Like -> Love), count remains
-              console.log('[Reaction Update] Changed from', oldReaction, 'to', reaction_type);
+            
             }
 
             const updatedPost = {
@@ -282,8 +276,7 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
               totalReactions: newTotal,
             };
 
-            console.log('[Reaction Update] Updated post:', updatedPost);
-
+       
             return updatedPost;
           });
         });
@@ -298,15 +291,13 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
 
   const dispatch = useDispatch();
   const navigation = useNavigation();
-  const [localPosts, setLocalPosts] = useState([]);
-  const [loading, setLoading] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [activeVideo, setActiveVideo] = useState(null);
   const isFocused = useIsFocused();
-  const [loadingMore, setLoadingMore] = useState(false);
+
   const [searchCount, setSearchCount] = useState(false);
-  const [lastEvaluatedKey, setLastEvaluatedKey] = useState(null);
-  const [hasMorePosts, setHasMorePosts] = useState(true);
+
   const [fetchLimit, setFetchLimit] = useState(3);
   const [expandedTexts, setExpandedTexts] = useState({});
   const [searchResults, setSearchResults] = useState(false);
@@ -327,98 +318,40 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
   const reactionSheetRef = useRef(null);
   const [activeReactionForumId, setActiveReactionForumId] = useState(null);
 
-  const reactionConfig = [
-    { type: 'Like', emoji: '👍', color: 'text-blue-600', label: 'Like', outlineIcon: 'thumb-up-outline' },
-    { type: 'Insightful', emoji: '💡', color: 'text-yellow-500', label: 'Insightful', outlineIcon: 'lightbulb-on-outline' },
-    { type: 'Support', emoji: '🤝', color: 'text-green-500', label: 'Support', outlineIcon: 'handshake-outline' },
-    { type: 'Funny', emoji: '😂', color: 'text-yellow-400', label: 'Funny', outlineIcon: 'emoticon-excited-outline' },
-    { type: 'Thanks', emoji: '🙏', color: 'text-rose-500', label: 'Thanks', outlineIcon: 'hand-heart-outline' },
-  ];
-
-  const fetchLatestPosts = async (lastKey = null) => {
-    if (!isConnected || loading || loadingMore) return;
-
-    const startTime = Date.now();
-    lastKey ? setLoadingMore(true) : setLoading(true);
-
-    try {
-      const requestData = {
-        command: 'getAllForumPosts',
-        type: 'All',
-        limit: fetchLimit,
-        ...(lastKey && { lastEvaluatedKey: lastKey }),
-      };
-
-      const response = await withTimeout(
-        apiClient.post('/getAllForumPosts', requestData),
-        10000
-      );
-
-      const newPosts = response?.data?.response || [];
-
-      if (!newPosts.length) {
-        setHasMorePosts(false);
-        return;
-      }
-
-      // Adjust fetchLimit based on response speed
-      const responseTime = Date.now() - startTime;
-      if (responseTime < 500) setFetchLimit(prev => Math.min(prev + 2, 10));
-      else if (responseTime > 1200) setFetchLimit(prev => Math.max(prev - 1, 3));
-
-      const sortedNewPosts = newPosts.sort((a, b) => b.posted_on - a.posted_on);
-      const forumIds = sortedNewPosts.map(p => p.forum_id);
-
-      const [postsWithMedia, reactionMap, commentCountsArray] = await Promise.all([
-        fetchMediaForPost(sortedNewPosts),
-        fetchForumReactionsBatch(forumIds, myId),
-        Promise.all(forumIds.map(id => fetchCommentCount(id))), // ✅ updated
-      ]);
-console.log('reactionMap',reactionMap)
-      // Map comment counts to forumIds
-      const commentCounts = {};
-      forumIds.forEach((id, idx) => {
-        commentCounts[id] = commentCountsArray[idx];
-      });
-
-      const postsWithExtras = postsWithMedia.map((post) => {
-        const forumId = post.forum_id;
-        const reactions = reactionMap[forumId] || {};
-
-        return {
-          ...post,
-          commentCount: commentCounts[forumId] || 0,
-          reactionsCount: reactions.reactionsCount || {},
-          totalReactions: reactions.totalReactions || 0,
-          userReaction: reactions.userReaction || null,
-        };
-      });
 
 
+  const {
+    localPosts,
+    fetchPosts,
+    loading,
+    loadingMore,
+    hasMorePosts,
+    lastEvaluatedKey,
+    setLocalPosts,
+  } = useForumFetcher({
+    command: 'getAllForumPosts',
+    type: 'All',
+    fetchLimit: 10,
+    isConnected,
+    preloadUrls,
+    myId
+  });
+  
 
-      setLocalPosts(prev => {
-        const combined = [...prev, ...postsWithExtras];
-        const unique = combined.filter(
-          (p, i, arr) => i === arr.findIndex(pp => pp.forum_id === p.forum_id)
-        );
-        return unique;
-      });
-
-      setHasMorePosts(!!response.data.lastEvaluatedKey);
-      setLastEvaluatedKey(response.data.lastEvaluatedKey || null);
-    } catch (error) {
-
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  };
-
-
+  const {
+    getMediaForItem,
+    getAuthorImage,
+    preloadUrls,
+    onViewableItemsChanged,
+    viewabilityConfig,
+    version,
+  } = useForumMedia(localPosts, isTabActive, isFocused,setActiveVideo);
 
 
   useEffect(() => {
     const listener = EventRegister.addEventListener('onForumPostCreated', async ({ newPost }) => {
+      if (!isFocused) return;
+
       try {
         const postWithMedia = await fetchMediaForPost(newPost);
         setLocalPosts((prev) => [postWithMedia, ...prev]);
@@ -431,10 +364,14 @@ console.log('reactionMap',reactionMap)
     });
 
     const deleteListener = EventRegister.addEventListener('onForumPostDeleted', ({ forum_id }) => {
+      if (!isFocused) return;
+
       setLocalPosts((prev) => prev.filter((post) => post.forum_id !== forum_id));
     });
 
     const updateListener = EventRegister.addEventListener('onForumPostUpdated', async ({ updatedPost }) => {
+      if (!isFocused) return;
+
       try {
         const postWithMedia = await fetchMediaForPost(updatedPost);
         setLocalPosts((prev) =>
@@ -453,6 +390,8 @@ console.log('reactionMap',reactionMap)
 
     // 🔻 Listener to DECREASE comment count on deletion
     const commentDeletedListener = EventRegister.addEventListener('onCommentDeleted', ({ forum_id }) => {
+      if (!isFocused) return;
+
       setLocalPosts(prev =>
         prev.map(post => {
           if (post.forum_id === forum_id) {
@@ -494,71 +433,15 @@ console.log('reactionMap',reactionMap)
 
   useEffect(() => {
     if (!hasFetchedPosts) {
-      fetchLatestPosts();
+      fetchPosts();
       setHasFetchedPosts(true);
     }
   }, [hasFetchedPosts]);
 
   const handleEndReached = useCallback(() => {
     if (loading || loadingMore || !hasMorePosts) return;
-    fetchLatestPosts(lastEvaluatedKey);
+    fetchPosts(lastEvaluatedKey);
   }, [loading, loadingMore, hasMorePosts, lastEvaluatedKey]);
-
-
-  const viewedForumIdsRef = useRef(new Set());
-
-  const incrementViewCount = async (forumId) => {
-    try {
-      await apiClient.post('/forumViewCounts', {
-        command: 'forumViewCounts',
-        forum_id: forumId,
-      });
-    } catch (error) {
-
-    }
-  };
-
-  const viewabilityConfig = {
-    itemVisiblePercentThreshold: 70,
-    minimumViewTime: 300,
-    waitForInteraction: false
-  };
-
-
-
-  const onViewableItemsChanged = useRef(({ viewableItems }) => {
-
-    if (!isFocused) {
-      setActiveVideo(null);
-      return;
-    }
-
-    const visibleItem = viewableItems.find(item => item.isViewable);
-
-    if (visibleItem) {
-      const forumId = visibleItem.item.forum_id;
-
-      // Still only auto-play video if there's a video
-      if (visibleItem.item.videoUrl) {
-        setActiveVideo(forumId);
-      } else {
-        setActiveVideo(null);
-      }
-
-      if (forumId && !viewedForumIdsRef.current.has(forumId)) {
-
-        viewedForumIdsRef.current.add(forumId);
-        incrementViewCount(forumId);
-      } else {
-
-      }
-    } else {
-      setActiveVideo(null);
-    }
-  }).current;
-
-
-
 
   const activeVideoRef = useRef(null);
   useEffect(() => {
@@ -576,30 +459,13 @@ console.log('reactionMap',reactionMap)
   }, [isFocused]);
 
 
-
-
-
-
-  const handleNavigate = (item) => {
-
-    setTimeout(() => {
-      if (item.user_type === "company") {
-        navigation.navigate('CompanyDetailsPage', { userId: item.user_id });
-      } else if (item.user_type === "users") {
-        navigation.navigate('UserDetailsPage', { userId: item.user_id });
-      }
-    }, 100);
-  };
-
-
   const commentSectionRef = useRef();
   const bottomSheetRef = useRef(null);
 
 
 
   const openCommentSheet = (forum_id, user_id, myId,item) => {
-    console.log('[Comment Sheet] Opening for forum_id:', forum_id, 'user_id:', myId);
-
+ 
     openSheet(
       <View style={{ flex: 1, backgroundColor: 'white' }}>
         <CommentsSection
@@ -632,315 +498,26 @@ console.log('reactionMap',reactionMap)
     );
   };
 
-  const toggleFullText = (id) => {
-    setExpandedTexts(prev => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
-  };
+  const renderItem = useRenderForumItem({
+    localPosts,
+    setLocalPosts,
+    isTabActive: isTabActive && isFocused,
+    activeVideo,
+    isFocused,
+    videoRefs,
+    activeReactionForumId,
+    setActiveReactionForumId,
+    openCommentSheet,
+    myId,
+    searchQuery,
+    getMediaForItem,
+    getAuthorImage,
+    openMediaViewer,
+    reactionSheetRef,
+    styles,
+  });
 
-
-  const sharePost = async (item) => {
-    try {
-      const baseUrl = 'https://bmebharat.com/latest/comment/';
-      const jobUrl = `${baseUrl}${item.forum_id}`;
-
-      const result = await Share.share({
-        message: jobUrl, // No extra space before URL
-      });
-
-      if (result.action === Share.sharedAction) {
-        if (result.activityType) {
-
-        } else {
-
-        }
-      } else if (result.action === Share.dismissedAction) {
-
-      }
-    } catch (error) {
-
-    }
-  };
-
-
-  const { height: screenHeight } = Dimensions.get('window');
-
-  const renderItem = useCallback(({ item }) => {
-
-    // console.log('Render', item.forum_id, item.totalReactions, item.userReaction);
-    return (
-
-      <View style={styles.comments}>
-        <View style={styles.dpContainer}>
-          <TouchableOpacity style={styles.dpContainer1} onPress={() => handleNavigate(item)}
-            activeOpacity={0.8}>
-            <FastImage
-              source={item.authorImageUrl ? { uri: item.authorImageUrl } : null}
-              style={styles.image1}
-              onError={() => {
-                // Optional error handling
-              }}
-            />
-
-          </TouchableOpacity>
-
-          <View style={styles.textContainer}>
-            <View style={styles.title3}>
-              <TouchableOpacity onPress={() => handleNavigate(item)}>
-                <Text style={{ flex: 1, alignSelf: 'flex-start', color: 'black', fontSize: 15, fontWeight: '600' }}>
-                  {(item.author || '').trimStart().trimEnd()}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-              <View>
-                <Text style={styles.title}>{item.author_category || ''}</Text>
-              </View>
-              <View>
-                <Text style={[styles.date1]}>{getTimeDisplayForum(item.posted_on)}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-        <View style={{ paddingHorizontal: 10, }}>
-
-          <ForumBody
-            html={normalizeHtml(item?.forum_body, searchQuery)}
-            forumId={item.forum_id}
-            isExpanded={expandedTexts[item.forum_id]}
-            toggleFullText={toggleFullText}
-          />
-        </View>
-        {item.videoUrl ? (
-          <TouchableOpacity activeOpacity={1} >
-            <Video
-              ref={(ref) => {
-                if (ref) {
-                  videoRefs[item.forum_id] = ref;
-                } else {
-                  delete videoRefs[item.forum_id];
-                }
-              }}
-              source={{ uri: item.videoUrl }}
-              style={{
-                width: '100%',
-                aspectRatio: item.aspectRatio || 16 / 9,
-                marginVertical: 5
-              }}
-              controls
-              paused={!isTabActive || activeVideo !== item.forum_id}
-              resizeMode="contain"
-              poster={item.thumbnailUrl}
-              repeat
-              posterResizeMode="cover"
-            />
-          </TouchableOpacity>
-
-        ) : (
-          item.imageUrl && (
-            <TouchableOpacity onPress={() => openMediaViewer([{ type: 'image', url: item.imageUrl }])}
-              activeOpacity={1} >
-              <FastImage
-                source={{
-                  uri: item.imageUrl,
-                  priority: FastImage.priority.high,
-                  cache: FastImage.cacheControl.immutable
-                }}
-                style={{
-                  width: '100%',
-                  aspectRatio: item.aspectRatio || 1,
-                  marginVertical: 5
-
-                }}
-                resizeMode={FastImage.resizeMode.contain}
-              />
-            </TouchableOpacity>
-
-          )
-        )}
-
-
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, height: 40, alignItems: 'center', }}>
-          <View>
-            <TouchableOpacity
-              onLongPress={() => {
-
-                setActiveReactionForumId(prev =>
-                  prev === item.forum_id ? null : item.forum_id
-                );
-              }}
-              activeOpacity={0.7}
-              style={{
-
-                flexDirection: 'row',
-                alignItems: 'center',
-              }}
-              onPress={async () => {
-
-                const post = localPosts.find(p => p.forum_id === item.forum_id);
-                const currentReaction = post?.userReaction || 'None';
-
-                // ⛳️ If there's any existing reaction, remove it
-                const selectedType = currentReaction !== 'None' && currentReaction !== null
-                  ? 'None'
-                  : 'Like';
-
-                setLocalPosts(prev =>
-                  prev.map(p => {
-                    if (p.forum_id !== item.forum_id) return p;
-
-                    let newTotal = Number(p.totalReactions || 0);
-                    let newReaction = selectedType;
-
-                    const hadReaction = currentReaction && currentReaction !== 'None';
-
-                    if (selectedType === 'None') {
-                      if (hadReaction) newTotal -= 1;
-                      newReaction = null;
-                    } else if (!hadReaction) {
-                      newTotal += 1;
-                    }
-
-                    return {
-                      ...p,
-                      userReaction: newReaction,
-                      totalReactions: newTotal,
-                    };
-                  })
-                );
-
-                await handleReactionUpdate(item.forum_id, selectedType, item);
-
-
-              }}
-
-            >
-
-              {item.userReaction && item.userReaction !== 'None' ? (
-                <>
-                  <Text style={{ fontSize: 15 }}>
-                    {reactionConfig.find(r => r.type === item.userReaction)?.emoji || '👍'}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: '#777', marginLeft: 4 }}>
-                    {reactionConfig.find(r => r.type === item.userReaction)?.label || 'Like'}
-                  </Text>
-                </>
-              ) : (
-                <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'center', }}>
-                  {/* <Text style={{ fontSize: 12, color: '#777', marginRight: 6 }}>React: </Text> */}
-                  <Icon name="thumb-up-outline" size={20} color="#999" />
-
-                </View>
-              )}
-
-              <TouchableOpacity
-                onPress={() => {
-                  reactionSheetRef.current?.open(item.forum_id, 'All');
-                }}
-                style={{ padding: 5, paddingHorizontal: 10 }}
-              >
-                {item.totalReactions > 0 && (
-                  <Text style={{ color: "#666" }}>
-                    ({item.totalReactions})
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </TouchableOpacity>
-
-
-
-            {activeReactionForumId === item.forum_id && (
-              <>
-                {/* Overlay to catch outside taps */}
-                <TouchableWithoutFeedback onPress={() => setActiveReactionForumId(null)}>
-                  <View
-                    style={{
-                      position: 'absolute',
-                      top: -1000,
-                      left: -1000,
-                      right: -1000,
-                      bottom: -1000,
-                      backgroundColor: 'transparent',
-                      zIndex: 0,
-                    }}
-                  />
-                </TouchableWithoutFeedback>
-
-                {/* Container for reactions - added flexDirection: 'row' and other styling */}
-                <View style={{
-                  position: 'absolute',
-                  bottom: 40, // Position above the reaction button
-                  left: 0,
-                  borderRadius: 40,
-                  flexDirection: 'row',
-
-                }}>
-                  {reactionConfig.map(({ type, emoji, label }) => {
-                    const isSelected = item.userReaction === type;
-                    return (
-                      <TouchableOpacity
-                        key={type}
-                        onPress={async () => {
-                          const selectedType = item.userReaction === type ? 'None' : type;
-                          await handleReactionUpdate(item.forum_id, selectedType, item);
-                          setActiveReactionForumId(null);
-                        }}
-                        style={{
-                          padding: 8,
-                          margin: 4,
-                          backgroundColor: isSelected ? '#c2d8f0' : '#f0f0f0',
-                          borderRadius: 20,
-                          borderWidth: 1,
-                          borderColor: '#ccc'
-                        }}
-                      >
-                        <Text style={{ fontSize: 20 }}>{emoji}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </>
-            )}
-          </View>
-
-        </View>
-
-
-        <View style={styles.iconContainer}>
-          <View>
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={() => openCommentSheet(item.forum_id, item.user_id, myId,item)}
-            >
-              <Icon name="comment-outline" size={17} color="#075cab" />
-              <Text style={styles.iconTextUnderlined}>
-                Comments{item.commentCount > 0 ? ` ${item.commentCount}` : ''}
-              </Text>
-            </TouchableOpacity>
-
-          </View>
-          <View>
-            <TouchableOpacity style={styles.iconButton}>
-              <Icon name="eye-outline" size={20} color="#075cab" />
-              <Text style={styles.iconTextUnderlined}>Views {item.viewsCount || '0'}</Text>
-            </TouchableOpacity>
-          </View>
-          <View>
-            <TouchableOpacity style={styles.iconButton} onPress={() => sharePost(item)}>
-              <Icon name="share-outline" size={21} color="#075cab" />
-              <Text style={styles.iconTextUnderlined}>Share</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-      </View>
-
-    );
-  }, [localPosts, activeVideo, expandedTexts, activeReactionForumId, isTabActive]);
-
-
+// console.log('localPosts',localPosts[0])
   const lastCheckedTimeRef = useRef(Math.floor(Date.now() / 1000));
   const [lastCheckedTime, setLastCheckedTime] = useState(lastCheckedTimeRef.current);
   const [newJobCount, setNewJobCount] = useState(0);
@@ -1010,21 +587,20 @@ console.log('reactionMap',reactionMap)
     setExpandedTexts(false);
 
     setLocalPosts([]);
-    setHasMorePosts(true);
-    setLastEvaluatedKey(null);
+
     setNewJobCount(0);
     setShowNewJobAlert(false);
     updateLastCheckedTime(Math.floor(Date.now() / 1000));
 
     dispatch(clearPosts());
-    await fetchLatestPosts(null);
+    await fetchPosts(null);
 
     setIsRefreshing(false);
 
     setTimeout(() => {
       isRefreshingRef.current = false;
     }, 300);
-  }, [fetchLatestPosts, dispatch]);
+  }, [fetchPosts, dispatch]);
 
 
   const debounceTimeout = useRef(null);
@@ -1299,12 +875,6 @@ console.log('reactionMap',reactionMap)
               ref={listRef}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              initialNumToRender={3}
-              maxToRenderPerBatch={10}
-              updateCellsBatchingPeriod={100}
-              windowSize={7}
-              removeClippedSubviews={true}
-
               onScrollBeginDrag={() => {
                 Keyboard.dismiss();
                 searchInputRef.current?.blur?.();
@@ -1326,6 +896,8 @@ console.log('reactionMap',reactionMap)
               keyExtractor={(item, index) => `${item.forum_id}-${index}`}
               onViewableItemsChanged={onViewableItemsChanged}
               viewabilityConfig={viewabilityConfig}
+            
+            
               refreshControl={
                 <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
               }
@@ -1376,7 +948,9 @@ console.log('reactionMap',reactionMap)
 
 // Latest Posts Component
 const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
-
+  useEffect(() => {
+    console.log(`LatestPosts isTabActive: ${isTabActive}`);
+  }, [isTabActive]);
   const posts = useSelector((state) => state.forum.posts);
   const { myId, myData } = useNetwork();
   const { isConnected } = useConnection();
@@ -1420,42 +994,18 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
       EventRegister.removeEventListener(deleteListener);
     };
   }, []);
-  // const storePosts = useSelector((state) => state.forum.posts);
-  const handleReactionUpdate = async (forumId, reactionType, item) => {
-    try {
 
-      await apiClient.post('/addOrUpdateForumReaction', {
-        command: 'addOrUpdateForumReaction',
-        forum_id: forumId,
-        user_id: myId,
-        reaction_type: reactionType,
-      });
-
-      // Emit event after successful reaction update
-      EventRegister.emit('onForumReactionUpdated', {
-        forum_id: forumId,
-        user_id: myId,
-        reaction_type: reactionType,
-        previous_reaction: item?.userReaction, // Now item is passed as parameter
-      });
-
-    } catch (err) {
-      console.error('[Reaction Submit] Failed to update reaction:', err);
-    }
-  };
 
   useEffect(() => {
     const reactionListener = EventRegister.addEventListener(
       'onForumReactionUpdated',
       ({ forum_id, reaction_type }) => {
-        console.log('[Reaction Event] Received:', { forum_id, reaction_type });
-
+      
         setLocalPosts(prev => {
           return prev.map(post => {
             if (post.forum_id !== forum_id) return post;
 
-            console.log('[Reaction Update] Updating post:', post.forum_id);
-
+  
             let newTotal = Number(post.totalReactions || 0);
             let newReaction = reaction_type;
 
@@ -1468,8 +1018,7 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
             } else if (!hadReaction) {
               newTotal += 1;
             } else if (oldReaction !== reaction_type) {
-              // Reaction changed (e.g., Like -> Love), count remains
-              console.log('[Reaction Update] Changed from', oldReaction, 'to', reaction_type);
+            
             }
 
             const updatedPost = {
@@ -1478,8 +1027,7 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
               totalReactions: newTotal,
             };
 
-            console.log('[Reaction Update] Updated post:', updatedPost);
-
+       
             return updatedPost;
           });
         });
@@ -1494,15 +1042,13 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
 
   const dispatch = useDispatch();
   const navigation = useNavigation();
-  const [localPosts, setLocalPosts] = useState([]);
-  const [loading, setLoading] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [activeVideo, setActiveVideo] = useState(null);
   const isFocused = useIsFocused();
-  const [loadingMore, setLoadingMore] = useState(false);
+
   const [searchCount, setSearchCount] = useState(false);
-  const [lastEvaluatedKey, setLastEvaluatedKey] = useState(null);
-  const [hasMorePosts, setHasMorePosts] = useState(true);
+
   const [fetchLimit, setFetchLimit] = useState(3);
   const [expandedTexts, setExpandedTexts] = useState({});
   const [searchResults, setSearchResults] = useState(false);
@@ -1513,185 +1059,50 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
 
   const listRef = useRef(null);
 
-  useScrollToTop(listRef);
-
-  useEffect(() => {
-    if (scrollRef) {
-      scrollRef.current = {
-        scrollToTop: () => {
-          listRef.current?.scrollToOffset?.({ offset: 0, animated: true });
-        },
-        handleRefresh: () => {
-          // your refresh logic here
-        },
-      };
-    }
-  }, [scrollRef]);
-
-
-  const withTimeout = (promise, timeout = 10000) => {
-    return Promise.race([
-      promise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Request timed out")), timeout)),
-    ]);
-  };
 
   const reactionSheetRef = useRef(null);
   const [activeReactionForumId, setActiveReactionForumId] = useState(null);
 
-  const reactionConfig = [
-    { type: 'Like', emoji: '👍', color: 'text-blue-600', label: 'Like', outlineIcon: 'thumb-up-outline' },
-    { type: 'Insightful', emoji: '💡', color: 'text-yellow-500', label: 'Insightful', outlineIcon: 'lightbulb-on-outline' },
-    { type: 'Support', emoji: '🤝', color: 'text-green-500', label: 'Support', outlineIcon: 'handshake-outline' },
-    { type: 'Funny', emoji: '😂', color: 'text-yellow-400', label: 'Funny', outlineIcon: 'emoticon-excited-outline' },
-    { type: 'Thanks', emoji: '🙏', color: 'text-rose-500', label: 'Thanks', outlineIcon: 'hand-heart-outline' },
-  ];
+  const {
+    localPosts,
+    fetchPosts,
+    loading,
+    loadingMore,
+    hasMorePosts,
+    lastEvaluatedKey,
+    setLocalPosts
+  } = useForumFetcher({
+    command: 'getLatestPosts',
+    type: 'Latest',
+    fetchLimit: 10,
+    isConnected,
+    preloadUrls
+  });
+  
 
-  const fetchLatestPosts = async (lastKey = null) => {
-    if (!isConnected || loading || loadingMore) return;
-
-    const startTime = Date.now();
-    lastKey ? setLoadingMore(true) : setLoading(true);
-
-    try {
-      const requestData = {
-        command: 'getLatestPosts',
-        limit: fetchLimit,
-        ...(lastKey && { lastEvaluatedKey: lastKey }),
-      };
-
-      const response = await withTimeout(
-        apiClient.post('/getLatestPosts', requestData),
-        10000
-      );
-
-      const newPosts = response?.data?.response || [];
-
-      if (!newPosts.length) {
-        setHasMorePosts(false);
-        return;
-      }
-
-      // Adjust fetchLimit based on response speed
-      const responseTime = Date.now() - startTime;
-      if (responseTime < 500) setFetchLimit(prev => Math.min(prev + 2, 10));
-      else if (responseTime > 1200) setFetchLimit(prev => Math.max(prev - 1, 3));
-
-      const sortedNewPosts = newPosts.sort((a, b) => b.posted_on - a.posted_on);
-      const forumIds = sortedNewPosts.map(p => p.forum_id);
-
-      const [postsWithMedia, reactionMap, commentCountsArray] = await Promise.all([
-        fetchMediaForPost(sortedNewPosts),
-        fetchForumReactionsBatch(forumIds, myId),
-        Promise.all(forumIds.map(id => fetchCommentCount(id))), // ✅ updated
-      ]);
-
-      // Map comment counts to forumIds
-      const commentCounts = {};
-      forumIds.forEach((id, idx) => {
-        commentCounts[id] = commentCountsArray[idx];
-      });
-
-      const postsWithExtras = postsWithMedia.map((post) => {
-        const forumId = post.forum_id;
-        const reactions = reactionMap[forumId] || {};
-
-        return {
-          ...post,
-          commentCount: commentCounts[forumId] || 0,
-          reactionsCount: reactions.reactionsCount || {},
-          totalReactions: reactions.totalReactions || 0,
-          userReaction: reactions.userReaction || null,
-        };
-      });
-
-
-
-      setLocalPosts(prev => {
-        const combined = [...prev, ...postsWithExtras];
-        const unique = combined.filter(
-          (p, i, arr) => i === arr.findIndex(pp => pp.forum_id === p.forum_id)
-        );
-        return unique;
-      });
-
-      setHasMorePosts(!!response.data.lastEvaluatedKey);
-      setLastEvaluatedKey(response.data.lastEvaluatedKey || null);
-    } catch (error) {
-
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  };
+  const {
+    getMediaForItem,
+    getAuthorImage,
+    preloadUrls,
+    onViewableItemsChanged,
+    viewabilityConfig,
+    version,
+  } = useForumMedia(localPosts, isTabActive,isFocused, setActiveVideo);
 
 
   useEffect(() => {
     if (!hasFetchedPosts) {
-      fetchLatestPosts();
+      fetchPosts();
       setHasFetchedPosts(true);
     }
   }, [hasFetchedPosts]);
 
   const handleEndReached = useCallback(() => {
     if (loading || loadingMore || !hasMorePosts) return;
-    fetchLatestPosts(lastEvaluatedKey);
+    fetchPosts(lastEvaluatedKey);
   }, [loading, loadingMore, hasMorePosts, lastEvaluatedKey]);
 
 
-  const viewedForumIdsRef = useRef(new Set());
-
-  const incrementViewCount = async (forumId) => {
-
-    try {
-      const response = await apiClient.post('/forumViewCounts', {
-        command: 'forumViewCounts',
-        forum_id: forumId,
-      });
-
-    } catch (error) {
-
-    }
-  };
-
-
-  const viewabilityConfig = {
-    itemVisiblePercentThreshold: 70,
-    minimumViewTime: 300,
-    waitForInteraction: false
-  };
-
-
-  const onViewableItemsChanged = useRef(({ viewableItems }) => {
-
-    if (!isFocused) {
-      setActiveVideo(null);
-      return;
-    }
-
-    const visibleItem = viewableItems.find(item => item.isViewable);
-
-    if (visibleItem) {
-      const forumId = visibleItem.item.forum_id;
-
-      // Still only auto-play video if there's a video
-      if (visibleItem.item.videoUrl) {
-        setActiveVideo(forumId);
-      } else {
-        setActiveVideo(null);
-      }
-
-      if (forumId && !viewedForumIdsRef.current.has(forumId)) {
-
-        viewedForumIdsRef.current.add(forumId);
-        incrementViewCount(forumId);
-      } else {
-
-      }
-    } else {
-      setActiveVideo(null);
-    }
-  }).current;
 
 
 
@@ -1703,6 +1114,7 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
     activeVideoRef.current = activeVideo;
   }, [activeVideo]);
 
+
   useEffect(() => {
     if (!isFocused) {
       setActiveVideo(null);
@@ -1713,22 +1125,18 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
     };
   }, [isFocused]);
 
-
-
-
-
-
-  const handleNavigate = (item) => {
-
-    setTimeout(() => {
-      if (item.user_type === "company") {
-        navigation.navigate('CompanyDetailsPage', { userId: item.user_id });
-      } else if (item.user_type === "users") {
-        navigation.navigate('UserDetailsPage', { userId: item.user_id });
+// In each tab component (AllPosts, LatestPosts, TrendingPosts):
+useEffect(() => {
+  return () => {
+    // Clean up video refs when component unmounts
+    Object.keys(videoRefs).forEach(key => {
+      if (videoRefs[key] && typeof videoRefs[key].setNativeProps === 'function') {
+        videoRefs[key].setNativeProps({ paused: true });
       }
-    }, 100);
+      delete videoRefs[key];
+    });
   };
-
+}, []);
 
   const commentSectionRef = useRef();
   const bottomSheetRef = useRef(null);
@@ -1736,7 +1144,6 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
 
 
   const openCommentSheet = (forum_id, user_id, myId,item) => {
-    console.log('[Comment Sheet] Opening for forum_id:', forum_id, 'user_id:', myId);
 
     openSheet(
       <View style={{ flex: 1, backgroundColor: 'white' }}>
@@ -1745,7 +1152,7 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
           currentUserId={myId}
           ref={commentSectionRef}
           closeBottomSheet={() => {
-            console.log('[Comment Sheet] Closing sheet');
+   
             bottomSheetRef.current?.scrollTo(0);
           }}
         />
@@ -1771,315 +1178,27 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
   };
 
 
-  const toggleFullText = (id) => {
-    setExpandedTexts(prev => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
-  };
-
-
-  const sharePost = async (item) => {
-    try {
-      const baseUrl = 'https://bmebharat.com/latest/comment/';
-      const jobUrl = `${baseUrl}${item.forum_id}`;
-
-      const result = await Share.share({
-        message: jobUrl, // No extra space before URL
-      });
-
-      if (result.action === Share.sharedAction) {
-        if (result.activityType) {
-
-        } else {
-
-        }
-      } else if (result.action === Share.dismissedAction) {
-
-      }
-    } catch (error) {
-
-    }
-  };
-
-
-  const { height: screenHeight } = Dimensions.get('window');
-
-  const renderItem = useCallback(({ item }) => {
-
-    // console.log('Render', item.forum_id, item.totalReactions, item.userReaction);
-    return (
-
-      <View style={styles.comments}>
-        <View style={styles.dpContainer}>
-          <TouchableOpacity style={styles.dpContainer1} onPress={() => handleNavigate(item)}
-            activeOpacity={0.8}>
-            <FastImage
-              source={item.authorImageUrl ? { uri: item.authorImageUrl } : null}
-              style={styles.image1}
-              onError={() => {
-                // Optional error handling
-              }}
-            />
-
-          </TouchableOpacity>
-
-          <View style={styles.textContainer}>
-            <View style={styles.title3}>
-              <TouchableOpacity onPress={() => handleNavigate(item)}>
-                <Text style={{ flex: 1, alignSelf: 'flex-start', color: 'black', fontSize: 15, fontWeight: '600' }}>
-                  {(item.author || '').trimStart().trimEnd()}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-              <View>
-                <Text style={styles.title}>{item.author_category || ''}</Text>
-              </View>
-              <View>
-                <Text style={[styles.date1]}>{getTimeDisplayForum(item.posted_on)}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-        <View style={{ paddingHorizontal: 10, }}>
-
-          <ForumBody
-            html={generateHighlightedHTML(item.forum_body, searchQuery)}
-            forumId={item.forum_id}
-            isExpanded={expandedTexts[item.forum_id]}
-            toggleFullText={toggleFullText}
-          />
-        </View>
-        {item.videoUrl ? (
-          <TouchableOpacity activeOpacity={1} >
-            <Video
-              ref={(ref) => {
-                if (ref) {
-                  videoRefs[item.forum_id] = ref;
-                } else {
-                  delete videoRefs[item.forum_id];
-                }
-              }}
-              source={{ uri: item.videoUrl }}
-              style={{
-                width: '100%',
-                aspectRatio: item.aspectRatio || 16 / 9,
-                marginVertical: 5
-              }}
-              controls
-              paused={!isTabActive || activeVideo !== item.forum_id}
-              resizeMode="contain"
-              poster={item.thumbnailUrl}
-              repeat
-              posterResizeMode="cover"
-            />
-          </TouchableOpacity>
-
-        ) : (
-          item.imageUrl && (
-            <TouchableOpacity onPress={() => openMediaViewer([{ type: 'image', url: item.imageUrl }])}
-              activeOpacity={1} >
-              <FastImage
-                source={{
-                  uri: item.imageUrl,
-                  priority: FastImage.priority.high,
-                  cache: FastImage.cacheControl.immutable
-                }}
-                style={{
-                  width: '100%',
-                  aspectRatio: item.aspectRatio || 1,
-                  marginVertical: 5
-
-                }}
-                resizeMode={FastImage.resizeMode.contain}
-              />
-            </TouchableOpacity>
-
-          )
-        )}
-
-
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, height: 40, alignItems: 'center', }}>
-          <View>
-            <TouchableOpacity
-              onLongPress={() => {
-
-                setActiveReactionForumId(prev =>
-                  prev === item.forum_id ? null : item.forum_id
-                );
-              }}
-              activeOpacity={0.7}
-              style={{
-
-                flexDirection: 'row',
-                alignItems: 'center',
-              }}
-              onPress={async () => {
-
-                const post = localPosts.find(p => p.forum_id === item.forum_id);
-                const currentReaction = post?.userReaction || 'None';
-
-                // ⛳️ If there's any existing reaction, remove it
-                const selectedType = currentReaction !== 'None' && currentReaction !== null
-                  ? 'None'
-                  : 'Like';
-
-                setLocalPosts(prev =>
-                  prev.map(p => {
-                    if (p.forum_id !== item.forum_id) return p;
-
-                    let newTotal = Number(p.totalReactions || 0);
-                    let newReaction = selectedType;
-
-                    const hadReaction = currentReaction && currentReaction !== 'None';
-
-                    if (selectedType === 'None') {
-                      if (hadReaction) newTotal -= 1;
-                      newReaction = null;
-                    } else if (!hadReaction) {
-                      newTotal += 1;
-                    }
-
-                    return {
-                      ...p,
-                      userReaction: newReaction,
-                      totalReactions: newTotal,
-                    };
-                  })
-                );
-
-                await handleReactionUpdate(item.forum_id, selectedType, item);
-
-
-              }}
-
-            >
-
-              {item.userReaction && item.userReaction !== 'None' ? (
-                <>
-                  <Text style={{ fontSize: 15 }}>
-                    {reactionConfig.find(r => r.type === item.userReaction)?.emoji || '👍'}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: '#777', marginLeft: 4 }}>
-                    {reactionConfig.find(r => r.type === item.userReaction)?.label || 'Like'}
-                  </Text>
-                </>
-              ) : (
-                <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'center', }}>
-                  {/* <Text style={{ fontSize: 12, color: '#777', marginRight: 6 }}>React: </Text> */}
-                  <Icon name="thumb-up-outline" size={20} color="#999" />
-
-                </View>
-              )}
-
-              <TouchableOpacity
-                onPress={() => {
-                  reactionSheetRef.current?.open(item.forum_id, 'All');
-                }}
-                style={{ padding: 5, paddingHorizontal: 10 }}
-              >
-                {item.totalReactions > 0 && (
-                  <Text style={{ color: "#666" }}>
-                    ({item.totalReactions})
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </TouchableOpacity>
 
 
 
-            {activeReactionForumId === item.forum_id && (
-              <>
-                {/* Overlay to catch outside taps */}
-                <TouchableWithoutFeedback onPress={() => setActiveReactionForumId(null)}>
-                  <View
-                    style={{
-                      position: 'absolute',
-                      top: -1000,
-                      left: -1000,
-                      right: -1000,
-                      bottom: -1000,
-                      backgroundColor: 'transparent',
-                      zIndex: 0,
-                    }}
-                  />
-                </TouchableWithoutFeedback>
-
-                {/* Container for reactions - added flexDirection: 'row' and other styling */}
-                <View style={{
-                  position: 'absolute',
-                  bottom: 40, // Position above the reaction button
-                  left: 0,
-                  borderRadius: 40,
-                  flexDirection: 'row',
-
-                }}>
-                  {reactionConfig.map(({ type, emoji, label }) => {
-                    const isSelected = item.userReaction === type;
-                    return (
-                      <TouchableOpacity
-                        key={type}
-                        onPress={async () => {
-                          const selectedType = item.userReaction === type ? 'None' : type;
-                          await handleReactionUpdate(item.forum_id, selectedType, item);
-                          setActiveReactionForumId(null);
-                        }}
-                        style={{
-                          padding: 8,
-                          margin: 4,
-                          backgroundColor: isSelected ? '#c2d8f0' : '#f0f0f0',
-                          borderRadius: 20,
-                          borderWidth: 1,
-                          borderColor: '#ccc'
-                        }}
-                      >
-                        <Text style={{ fontSize: 20 }}>{emoji}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </>
-            )}
-          </View>
-
-        </View>
-
-
-        <View style={styles.iconContainer}>
-          <View>
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={() => openCommentSheet(item.forum_id, item.user_id, myId, item)}
-            >
-              <Icon name="comment-outline" size={17} color="#075cab" />
-              <Text style={styles.iconTextUnderlined}>
-                Comments{item.commentCount > 0 ? ` ${item.commentCount}` : ''}
-              </Text>
-            </TouchableOpacity>
-
-          </View>
-          <View>
-            <TouchableOpacity style={styles.iconButton}>
-              <Icon name="eye-outline" size={20} color="#075cab" />
-              <Text style={styles.iconTextUnderlined}>Views {item.viewsCount || '0'}</Text>
-            </TouchableOpacity>
-          </View>
-          <View>
-            <TouchableOpacity style={styles.iconButton} onPress={() => sharePost(item)}>
-              <Icon name="share-outline" size={21} color="#075cab" />
-              <Text style={styles.iconTextUnderlined}>Share</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-
-      </View>
-
-    );
-  }, [localPosts, activeVideo, expandedTexts, activeReactionForumId, isTabActive]);
-
+  const renderItem = useRenderForumItem({
+    localPosts,
+    setLocalPosts,
+    isTabActive: isTabActive && isFocused,
+    activeVideo,
+    isFocused,
+    videoRefs,
+    activeReactionForumId,
+    setActiveReactionForumId,
+    openCommentSheet,
+    myId,
+    searchQuery,
+    getMediaForItem,
+    getAuthorImage,
+    openMediaViewer,
+    reactionSheetRef,
+    styles,
+  });
 
 
   const handleRefresh = useCallback(async () => {
@@ -2104,18 +1223,16 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
     setExpandedTexts(false);
 
     setLocalPosts([]);
-    setHasMorePosts(true);
-    setLastEvaluatedKey(null);
 
     dispatch(clearPosts());
-    await fetchLatestPosts(null);
+    await fetchPosts(null);
 
     setIsRefreshing(false);
 
     setTimeout(() => {
       isRefreshingRef.current = false;
     }, 300);
-  }, [fetchLatestPosts, dispatch]);
+  }, [fetchPosts, dispatch]);
 
 
   const onRender = (id, phase, actualDuration) => {
@@ -2139,12 +1256,6 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
               ref={listRef}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              initialNumToRender={3}
-              maxToRenderPerBatch={10}
-              updateCellsBatchingPeriod={100}
-              windowSize={7}
-              removeClippedSubviews={true}
-
               onScrollBeginDrag={() => {
                 Keyboard.dismiss();
                 searchInputRef.current?.blur?.();
@@ -2211,7 +1322,9 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
 
 // Trending Posts Component
 const TrendingPosts = ({ scrollRef, videoRefs, isTabActive }) => {
-
+  useEffect(() => {
+    console.log(`Trending isTabActive: ${isTabActive}`);
+  }, [isTabActive]);
   const posts = useSelector((state) => state.forum.posts);
   const { myId, myData } = useNetwork();
   const [scrollY, setScrollY] = useState(0);
@@ -2284,8 +1397,7 @@ const TrendingPosts = ({ scrollRef, videoRefs, isTabActive }) => {
     const reactionListener = EventRegister.addEventListener(
       'onForumReactionUpdated',
       ({ forum_id, reaction_type }) => {
-        console.log('[Reaction Event] Received:', { forum_id, reaction_type });
-
+    
         setLocalPosts(prev => {
           return prev.map(post => {
             if (post.forum_id !== forum_id) return post;
@@ -2330,15 +1442,13 @@ const TrendingPosts = ({ scrollRef, videoRefs, isTabActive }) => {
 
   const dispatch = useDispatch();
   const navigation = useNavigation();
-  const [localPosts, setLocalPosts] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeVideo, setActiveVideo] = useState(null);
   const isFocused = useIsFocused();
-  const [loadingMore, setLoadingMore] = useState(false);
+
   const [searchCount, setSearchCount] = useState(false);
-  const [lastEvaluatedKey, setLastEvaluatedKey] = useState(null);
-  const [hasMorePosts, setHasMorePosts] = useState(true);
+
+
   const [fetchLimit, setFetchLimit] = useState(3);
   const [expandedTexts, setExpandedTexts] = useState({});
   const [searchResults, setSearchResults] = useState(false);
@@ -2365,113 +1475,49 @@ const TrendingPosts = ({ scrollRef, videoRefs, isTabActive }) => {
   }, [scrollRef]);
 
 
-  const withTimeout = (promise, timeout = 10000) => {
-    return Promise.race([
-      promise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Request timed out")), timeout)),
-    ]);
-  };
-
   const reactionSheetRef = useRef(null);
   const [activeReactionForumId, setActiveReactionForumId] = useState(null);
 
-  const reactionConfig = [
-    { type: 'Like', emoji: '👍', color: 'text-blue-600', label: 'Like', outlineIcon: 'thumb-up-outline' },
-    { type: 'Insightful', emoji: '💡', color: 'text-yellow-500', label: 'Insightful', outlineIcon: 'lightbulb-on-outline' },
-    { type: 'Support', emoji: '🤝', color: 'text-green-500', label: 'Support', outlineIcon: 'handshake-outline' },
-    { type: 'Funny', emoji: '😂', color: 'text-yellow-400', label: 'Funny', outlineIcon: 'emoticon-excited-outline' },
-    { type: 'Thanks', emoji: '🙏', color: 'text-rose-500', label: 'Thanks', outlineIcon: 'hand-heart-outline' },
-  ];
-
-  const fetchLatestPosts = async (lastKey = null) => {
-    if (!isConnected || loading || loadingMore) return;
-
-    const startTime = Date.now();
-    lastKey ? setLoadingMore(true) : setLoading(true);
-
-    try {
-      const requestData = {
-        command: 'getAllTrendingPosts',
-        limit: fetchLimit,
-        ...(lastKey && { lastEvaluatedKey: lastKey }),
-      };
-
-      const response = await withTimeout(
-        apiClient.post('/getAllTrendingPosts', requestData),
-        10000
-      );
-
-      const newPosts = response?.data?.response || [];
-
-      if (!newPosts.length) {
-        setHasMorePosts(false);
-        return;
-      }
-
-      // Adjust fetchLimit based on response speed
-      const responseTime = Date.now() - startTime;
-      if (responseTime < 500) setFetchLimit(prev => Math.min(prev + 2, 10));
-      else if (responseTime > 1200) setFetchLimit(prev => Math.max(prev - 1, 3));
-
-      const sortedNewPosts = newPosts.sort((a, b) => b.posted_on - a.posted_on);
-      const forumIds = sortedNewPosts.map(p => p.forum_id);
-
-      const [postsWithMedia, reactionMap, commentCountsArray] = await Promise.all([
-        fetchMediaForPost(sortedNewPosts),
-        fetchForumReactionsBatch(forumIds, myId),
-        Promise.all(forumIds.map(id => fetchCommentCount(id))), // ✅ updated
-      ]);
-
-      // Map comment counts to forumIds
-      const commentCounts = {};
-      forumIds.forEach((id, idx) => {
-        commentCounts[id] = commentCountsArray[idx];
-      });
-
-      const postsWithExtras = postsWithMedia.map((post) => {
-        const forumId = post.forum_id;
-        const reactions = reactionMap[forumId] || {};
-
-        return {
-          ...post,
-          commentCount: commentCounts[forumId] || 0,
-          reactionsCount: reactions.reactionsCount || {},
-          totalReactions: reactions.totalReactions || 0,
-          userReaction: reactions.userReaction || null,
-        };
-      });
 
 
 
-      setLocalPosts(prev => {
-        const combined = [...prev, ...postsWithExtras];
-        const unique = combined.filter(
-          (p, i, arr) => i === arr.findIndex(pp => pp.forum_id === p.forum_id)
-        );
-        return unique;
-      });
+  const {
+    localPosts,
+    fetchPosts,
+    loading,
+    loadingMore,
+    hasMorePosts,
+    lastEvaluatedKey,
+    setLocalPosts
+  } = useForumFetcher({
+    command: 'getAllTrendingPosts',
+    type: 'Trending',
+    fetchLimit: 10,
+    isConnected,
+    preloadUrls
+  });
+  
 
-      setHasMorePosts(!!response.data.lastEvaluatedKey);
-      setLastEvaluatedKey(response.data.lastEvaluatedKey || null);
-    } catch (error) {
-
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  };
+  const {
+    getMediaForItem,
+    getAuthorImage,
+    preloadUrls,
+    onViewableItemsChanged,
+    viewabilityConfig,
+    version,
+  } = useForumMedia(localPosts, isTabActive,isFocused, setActiveVideo);
 
 
   useEffect(() => {
     if (!hasFetchedPosts) {
-      fetchLatestPosts();
+      fetchPosts();
       setHasFetchedPosts(true);
     }
   }, [hasFetchedPosts]);
 
   const handleEndReached = useCallback(() => {
     if (loading || loadingMore || !hasMorePosts) return;
-    fetchLatestPosts(lastEvaluatedKey);
+    fetchPosts(lastEvaluatedKey);
   }, [loading, loadingMore, hasMorePosts, lastEvaluatedKey]);
 
 
@@ -2487,45 +1533,6 @@ const TrendingPosts = ({ scrollRef, videoRefs, isTabActive }) => {
 
     }
   };
-
-  const viewabilityConfig = {
-    itemVisiblePercentThreshold: 70,
-    minimumViewTime: 300,
-    waitForInteraction: false
-  };
-
-
-
-  const onViewableItemsChanged = useRef(({ viewableItems }) => {
-
-    if (!isFocused) {
-      setActiveVideo(null);
-      return;
-    }
-
-    const visibleItem = viewableItems.find(item => item.isViewable);
-
-    if (visibleItem) {
-      const forumId = visibleItem.item.forum_id;
-
-      // Still only auto-play video if there's a video
-      if (visibleItem.item.videoUrl) {
-        setActiveVideo(forumId);
-      } else {
-        setActiveVideo(null);
-      }
-
-      if (forumId && !viewedForumIdsRef.current.has(forumId)) {
-
-        viewedForumIdsRef.current.add(forumId);
-        incrementViewCount(forumId);
-      } else {
-
-      }
-    } else {
-      setActiveVideo(null);
-    }
-  }).current;
 
 
 
@@ -2546,20 +1553,18 @@ const TrendingPosts = ({ scrollRef, videoRefs, isTabActive }) => {
   }, [isFocused]);
 
 
-
-
-
-
-  const handleNavigate = (item) => {
-
-    setTimeout(() => {
-      if (item.user_type === "company") {
-        navigation.navigate('CompanyDetailsPage', { userId: item.user_id });
-      } else if (item.user_type === "users") {
-        navigation.navigate('UserDetailsPage', { userId: item.user_id });
+// In each tab component (AllPosts, LatestPosts, TrendingPosts):
+useEffect(() => {
+  return () => {
+    // Clean up video refs when component unmounts
+    Object.keys(videoRefs).forEach(key => {
+      if (videoRefs[key] && typeof videoRefs[key].setNativeProps === 'function') {
+        videoRefs[key].setNativeProps({ paused: true });
       }
-    }, 100);
+      delete videoRefs[key];
+    });
   };
+}, []);
 
 
   const commentSectionRef = useRef();
@@ -2598,316 +1603,25 @@ const TrendingPosts = ({ scrollRef, videoRefs, isTabActive }) => {
     );
   };
 
-  const toggleFullText = (id) => {
-    setExpandedTexts(prev => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
-  };
 
-
-  const sharePost = async (item) => {
-    try {
-      const baseUrl = 'https://bmebharat.com/latest/comment/';
-      const jobUrl = `${baseUrl}${item.forum_id}`;
-
-      const result = await Share.share({
-        message: jobUrl, // No extra space before URL
-      });
-
-      if (result.action === Share.sharedAction) {
-        if (result.activityType) {
-
-        } else {
-
-        }
-      } else if (result.action === Share.dismissedAction) {
-
-      }
-    } catch (error) {
-
-    }
-  };
-
-
-  const { height: screenHeight } = Dimensions.get('window');
-
-  const renderItem = useCallback(({ item }) => {
-
-    // console.log('Render', item.forum_id, item.totalReactions, item.userReaction);
-    return (
-
-      <View style={styles.comments}>
-        <View style={styles.dpContainer}>
-          <TouchableOpacity style={styles.dpContainer1} onPress={() => handleNavigate(item)}
-            activeOpacity={0.8}>
-            <FastImage
-              source={item.authorImageUrl ? { uri: item.authorImageUrl } : null}
-              style={styles.image1}
-              onError={() => {
-                // Optional error handling
-              }}
-            />
-
-          </TouchableOpacity>
-
-          <View style={styles.textContainer}>
-            <View style={styles.title3}>
-              <TouchableOpacity onPress={() => handleNavigate(item)}>
-                <Text style={{ flex: 1, alignSelf: 'flex-start', color: 'black', fontSize: 15, fontWeight: '600' }}>
-                  {(item.author || '').trimStart().trimEnd()}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-              <View>
-                <Text style={styles.title}>{item.author_category || ''}</Text>
-              </View>
-              <View>
-                <Text style={[styles.date1]}>{getTimeDisplayForum(item.posted_on)}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-        <View style={{ paddingHorizontal: 10, }}>
-
-          <ForumBody
-            html={generateHighlightedHTML(item.forum_body, searchQuery)}
-            forumId={item.forum_id}
-            isExpanded={expandedTexts[item.forum_id]}
-            toggleFullText={toggleFullText}
-          />
-        </View>
-        {item.videoUrl ? (
-          <TouchableOpacity activeOpacity={1} >
-            <Video
-              ref={(ref) => {
-                if (ref) {
-                  videoRefs[item.forum_id] = ref;
-                } else {
-                  delete videoRefs[item.forum_id];
-                }
-              }}
-              source={{ uri: item.videoUrl }}
-              style={{
-                width: '100%',
-                aspectRatio: item.aspectRatio || 16 / 9,
-                marginVertical: 5
-              }}
-              controls
-              paused={!isTabActive || activeVideo !== item.forum_id}
-              resizeMode="contain"
-              poster={item.thumbnailUrl}
-              repeat
-              posterResizeMode="cover"
-            />
-          </TouchableOpacity>
-
-        ) : (
-          item.imageUrl && (
-            <TouchableOpacity onPress={() => openMediaViewer([{ type: 'image', url: item.imageUrl }])}
-              activeOpacity={1} >
-              <FastImage
-                source={{
-                  uri: item.imageUrl,
-                  priority: FastImage.priority.high,
-                  cache: FastImage.cacheControl.immutable
-                }}
-                style={{
-                  width: '100%',
-                  aspectRatio: item.aspectRatio || 1,
-                  marginVertical: 5
-
-                }}
-                resizeMode={FastImage.resizeMode.contain}
-              />
-            </TouchableOpacity>
-
-          )
-        )}
-
-
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, height: 40, alignItems: 'center', }}>
-          <View>
-            <TouchableOpacity
-              onLongPress={() => {
-
-                setActiveReactionForumId(prev =>
-                  prev === item.forum_id ? null : item.forum_id
-                );
-              }}
-              activeOpacity={0.7}
-              style={{
-
-                flexDirection: 'row',
-                alignItems: 'center',
-              }}
-              onPress={async () => {
-
-                const post = localPosts.find(p => p.forum_id === item.forum_id);
-                const currentReaction = post?.userReaction || 'None';
-
-                // ⛳️ If there's any existing reaction, remove it
-                const selectedType = currentReaction !== 'None' && currentReaction !== null
-                  ? 'None'
-                  : 'Like';
-
-                setLocalPosts(prev =>
-                  prev.map(p => {
-                    if (p.forum_id !== item.forum_id) return p;
-
-                    let newTotal = Number(p.totalReactions || 0);
-                    let newReaction = selectedType;
-
-                    const hadReaction = currentReaction && currentReaction !== 'None';
-
-                    if (selectedType === 'None') {
-                      if (hadReaction) newTotal -= 1;
-                      newReaction = null;
-                    } else if (!hadReaction) {
-                      newTotal += 1;
-                    }
-
-                    return {
-                      ...p,
-                      userReaction: newReaction,
-                      totalReactions: newTotal,
-                    };
-                  })
-                );
-
-                await handleReactionUpdate(item.forum_id, selectedType, item);
-
-
-              }}
-
-            >
-
-              {item.userReaction && item.userReaction !== 'None' ? (
-                <>
-                  <Text style={{ fontSize: 15 }}>
-                    {reactionConfig.find(r => r.type === item.userReaction)?.emoji || '👍'}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: '#777', marginLeft: 4 }}>
-                    {reactionConfig.find(r => r.type === item.userReaction)?.label || 'Like'}
-                  </Text>
-                </>
-              ) : (
-                <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'center', }}>
-                  {/* <Text style={{ fontSize: 12, color: '#777', marginRight: 6 }}>React: </Text> */}
-                  <Icon name="thumb-up-outline" size={20} color="#999" />
-
-                </View>
-              )}
-
-              <TouchableOpacity
-                onPress={() => {
-                  reactionSheetRef.current?.open(item.forum_id, 'All');
-                }}
-                style={{ padding: 5, paddingHorizontal: 10 }}
-              >
-                {item.totalReactions > 0 && (
-                  <Text style={{ color: "#666" }}>
-                    ({item.totalReactions})
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </TouchableOpacity>
-
-
-
-            {activeReactionForumId === item.forum_id && (
-              <>
-                {/* Overlay to catch outside taps */}
-                <TouchableWithoutFeedback onPress={() => setActiveReactionForumId(null)}>
-                  <View
-                    style={{
-                      position: 'absolute',
-                      top: -1000,
-                      left: -1000,
-                      right: -1000,
-                      bottom: -1000,
-                      backgroundColor: 'transparent',
-                      zIndex: 0,
-                    }}
-                  />
-                </TouchableWithoutFeedback>
-
-                {/* Container for reactions - added flexDirection: 'row' and other styling */}
-                <View style={{
-                  position: 'absolute',
-                  bottom: 40, // Position above the reaction button
-                  left: 0,
-                  borderRadius: 40,
-                  flexDirection: 'row',
-
-                }}>
-                  {reactionConfig.map(({ type, emoji, label }) => {
-                    const isSelected = item.userReaction === type;
-                    return (
-                      <TouchableOpacity
-                        key={type}
-                        onPress={async () => {
-                          const selectedType = item.userReaction === type ? 'None' : type;
-                          await handleReactionUpdate(item.forum_id, selectedType, item);
-                          setActiveReactionForumId(null);
-                        }}
-                        style={{
-                          padding: 8,
-                          margin: 4,
-                          backgroundColor: isSelected ? '#c2d8f0' : '#f0f0f0',
-                          borderRadius: 20,
-                          borderWidth: 1,
-                          borderColor: '#ccc'
-
-                        }}
-                      >
-                        <Text style={{ fontSize: 20 }}>{emoji}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </>
-            )}
-          </View>
-
-        </View>
-
-
-        <View style={styles.iconContainer}>
-          <View>
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={() => openCommentSheet(item.forum_id, item.user_id, myId, item)}
-            >
-              <Icon name="comment-outline" size={17} color="#075cab" />
-              <Text style={styles.iconTextUnderlined}>
-                Comments{item.commentCount > 0 ? ` ${item.commentCount}` : ''}
-              </Text>
-            </TouchableOpacity>
-
-          </View>
-          <View>
-            <TouchableOpacity style={styles.iconButton}>
-              <Icon name="eye-outline" size={20} color="#075cab" />
-              <Text style={styles.iconTextUnderlined}>Views {item.viewsCount || '0'}</Text>
-            </TouchableOpacity>
-          </View>
-          <View>
-            <TouchableOpacity style={styles.iconButton} onPress={() => sharePost(item)}>
-              <Icon name="share-outline" size={21} color="#075cab" />
-              <Text style={styles.iconTextUnderlined}>Share</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-
-      </View>
-
-    );
-  }, [localPosts, activeVideo, expandedTexts, activeReactionForumId, isTabActive]);
-
+  const renderItem = useRenderForumItem({
+    localPosts,
+    setLocalPosts,
+    isTabActive: isTabActive && isFocused,
+    activeVideo,
+    isFocused,
+    videoRefs,
+    activeReactionForumId,
+    setActiveReactionForumId,
+    openCommentSheet,
+    myId,
+    searchQuery,
+    getMediaForItem,
+    getAuthorImage,
+    openMediaViewer,
+    reactionSheetRef,
+    styles,
+  });
 
   const handleRefresh = useCallback(async () => {
     if (!isConnected) {
@@ -2931,18 +1645,16 @@ const TrendingPosts = ({ scrollRef, videoRefs, isTabActive }) => {
     setExpandedTexts(false);
 
     setLocalPosts([]);
-    setHasMorePosts(true);
-    setLastEvaluatedKey(null);
 
     dispatch(clearPosts());
-    await fetchLatestPosts(null);
+    await fetchPosts(null);
 
     setIsRefreshing(false);
 
     setTimeout(() => {
       isRefreshingRef.current = false;
     }, 300);
-  }, [fetchLatestPosts, dispatch]);
+  }, [fetchPosts, dispatch]);
 
 
 
@@ -2965,12 +1677,6 @@ const TrendingPosts = ({ scrollRef, videoRefs, isTabActive }) => {
               ref={listRef}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              initialNumToRender={3}
-              maxToRenderPerBatch={10}
-              updateCellsBatchingPeriod={100}
-              windowSize={7}
-              removeClippedSubviews={true}
-
               onScrollBeginDrag={() => {
                 Keyboard.dismiss();
                 searchInputRef.current?.blur?.();
@@ -3153,13 +1859,15 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    marginRight: 10,
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
+    alignItems:'center',
+    justifyContent:'center'
 
   },
   textContainer: {
     flex: 1,
     justifyContent: 'space-between',
+    marginLeft: 10,
 
   },
   iconContainer: {
@@ -3283,6 +1991,24 @@ const styles = StyleSheet.create({
   label: {
     fontWeight: '600',
     textTransform: 'capitalize',
+  },
+reactionContainer: {
+    position: 'absolute',
+    bottom: 40,
+    left: 0,
+    borderRadius: 40,
+    flexDirection: 'row',
+  },
+  reactionButton: {
+    padding: 8,
+    margin: 4,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#ccc'
+  },
+  selectedReaction: {
+    backgroundColor: '#c2d8f0',
   },
 
 

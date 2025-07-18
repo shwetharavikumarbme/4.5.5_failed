@@ -46,6 +46,7 @@ import { openMediaViewer } from '../helperComponents.jsx/mediaViewer';
 import { ForumReactions } from '../helperComponents.jsx/ForumReactions';
 import ReactionSheet, { ReactionUserSheet } from '../helperComponents.jsx/ReactionUserSheet';
 import { ForumBody, normalizeHtml } from './forumBody';
+import { generateAvatarFromName } from '../helperComponents.jsx/useInitialsAvatar';
 
 
 const screenHeight = Dimensions.get('window').height;
@@ -192,11 +193,12 @@ const CommentScreen = ({ route }) => {
 
   const fetchPosts = async () => {
     if (!isConnected) {
-
+      console.log('[fetchPosts] Skipped fetch — not connected.');
       return;
     }
 
     seLoading(true);
+    console.log('[fetchPosts] Started fetching post:', forum_id);
 
     try {
       const requestData = {
@@ -205,45 +207,68 @@ const CommentScreen = ({ route }) => {
       };
 
       const res = await withTimeout(apiClient.post('/getForumPost', requestData), 5000);
+      console.log('[fetchPosts] API response:', res.data);
 
-      if (res.data.status === 'success') {
-        const postData = res.data.response.length > 0 ? res.data.response[0] : null;
+      // Handle both array and object formats
+      const postData = Array.isArray(res.data.response)
+        ? res.data.response[0]
+        : res.data.response;
 
-        if (!postData) {
+      console.log('[fetchPosts] Raw response:', res.data.response);
+      console.log('[fetchPosts] Parsed postData:', postData);
 
-          setErrorMessage('This post was removed by the author');
-          setMediaUrl('');
-          setMediaUrl1(getFallbackImage({}));
-          seLoading(false);
-          return;
-        }
-
-        setPost(postData);
-        await fetchCommentsCount(forum_id);
-
-        const [mediaRes, authorMediaRes] = await Promise.all([
-          getSignedUrl('mediaUrl', postData.fileKey),
-          getSignedUrl('mediaUrl1', postData.author_fileKey),
-        ]);
-
-        const mediaUrl = mediaRes.mediaUrl || '';
-        const rawMediaUrl1 = authorMediaRes.mediaUrl1 || '';
-
-        const isValidUrl = (url) => /^https?:\/\/.+\.(png|jpe?g|webp|gif)$/.test(url);
-        const mediaUrl1 = isValidUrl(rawMediaUrl1) ? rawMediaUrl1 : getFallbackImage(postData);
-
-        setMediaUrl(mediaUrl);
-        setMediaUrl1(mediaUrl1);
-
-        seLoading(false);
-      } else {
-
+      // If post is missing or empty object
+      if (!postData || Object.keys(postData).length === 0) {
+        console.warn('[fetchPosts] No valid post data. Showing removed message.');
         setErrorMessage('This post was removed by the author');
         setMediaUrl('');
-        setMediaUrl1(getFallbackImage({}));
+        setMediaUrl1('');
         seLoading(false);
+        return;
       }
+
+      // ✅ Clear any previous error
+      setErrorMessage('');
+
+      // Set post and comments
+      setPost(postData);
+      await fetchCommentsCount(forum_id);
+
+      console.log('[fetchPosts] fileKey:', postData.fileKey);
+      console.log('[fetchPosts] author_fileKey:', postData.author_fileKey);
+
+      // Media fetch
+      const mediaUrlPromise = postData.fileKey
+        ? getSignedUrl('mediaUrl', postData.fileKey)
+        : Promise.resolve({ mediaUrl: '' });
+
+      const mediaUrl1Promise = postData.author_fileKey
+        ? getSignedUrl('mediaUrl1', postData.author_fileKey)
+        : Promise.resolve({ mediaUrl1: '' });
+
+      const [mediaRes, authorMediaRes] = await Promise.all([mediaUrlPromise, mediaUrl1Promise]);
+
+      console.log('[fetchPosts] mediaRes:', mediaRes);
+      console.log('[fetchPosts] authorMediaRes:', authorMediaRes);
+
+      setMediaUrl(mediaRes.mediaUrl || '');
+
+      if (authorMediaRes.mediaUrl1) {
+        console.log('[fetchPosts] Using signed author image URL.');
+        setMediaUrl1(authorMediaRes.mediaUrl1);
+      } else {
+        const fallbackName = postData?.author || 'BME';
+        const avatarData = generateAvatarFromName(fallbackName);
+
+        console.log('[fetchPosts] No author fileKey, generating avatar from:', fallbackName);
+        console.log('[fetchPosts] Generated avatar data:', avatarData);
+
+        setMediaUrl1(avatarData);
+      }
+
+      seLoading(false);
     } catch (error) {
+      console.error('[fetchPosts] Error while fetching:', error);
 
       if (error.message === 'Network Error' || !error.response) {
         showToast('Network error, please check your connection', 'error');
@@ -253,10 +278,14 @@ const CommentScreen = ({ route }) => {
       }
 
       setMediaUrl('');
-      setMediaUrl1(getFallbackImage({}));
+      setMediaUrl1('');
       seLoading(false);
     }
   };
+
+
+
+
 
 
 
@@ -461,14 +490,38 @@ const CommentScreen = ({ route }) => {
 
           <View style={styles.headerContainer}>
             <View style={styles.leftHeader}>
-              <FastImage
-                source={{ uri: mediaUrl1 }}
-                style={styles.profileIcon}
-                resizeMode="cover"
-                onError={(e) => {
-                  // console.log('Image load failed:', e.nativeEvent);
-                }}
-              />
+              {typeof mediaUrl1 === 'string' && mediaUrl1 !== '' ? (
+                <FastImage
+                  source={{ uri: mediaUrl1 }}
+                  style={styles.profileIcon}
+                  resizeMode="cover"
+                  onError={(e) => {
+                    console.log('Image load failed:', e.nativeEvent);
+                  }}
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.profileIcon,
+                    {
+                      backgroundColor: mediaUrl1?.backgroundColor || '#ccc',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: mediaUrl1?.textColor || '#000',
+                      fontWeight: 'bold',
+                      fontSize: 16,
+                    }}
+                  >
+                    {mediaUrl1?.initials || ''}
+                  </Text>
+                </View>
+              )}
+
 
 
               <View style={styles.authorInfo}>
@@ -495,22 +548,22 @@ const CommentScreen = ({ route }) => {
             />
           </View>
           {mediaUrl ? (
-  <TouchableOpacity
-    style={styles.mediaContainer}
-    onPress={() => !isVideo && openMediaViewer([{ type: 'image', url: mediaUrl }])}
-    activeOpacity={1}
-  >
-    {isVideo ? (
-      <View style={styles.videoContainer}>
-        <Video
-          source={{ uri: mediaUrl }}
-          style={styles.video}
-          controls
-          repeat={true}
-          // paused={!isVideoPlaying}
-          resizeMode="contain"
-        />
-        {/* <TouchableOpacity 
+            <TouchableOpacity
+              style={styles.mediaContainer}
+              onPress={() => !isVideo && openMediaViewer([{ type: 'image', url: mediaUrl }])}
+              activeOpacity={1}
+            >
+              {isVideo ? (
+                <View style={styles.videoContainer}>
+                  <Video
+                    source={{ uri: mediaUrl }}
+                    style={styles.video}
+                    controls
+                    repeat={true}
+                    // paused={!isVideoPlaying}
+                    resizeMode="contain"
+                  />
+                  {/* <TouchableOpacity 
           style={styles.playButton} 
           onPress={() => setIsVideoPlaying(!isVideoPlaying)}
         >
@@ -521,16 +574,16 @@ const CommentScreen = ({ route }) => {
             style={{ opacity: isVideoPlaying ? 0 : 1 }}
           />
         </TouchableOpacity> */}
-      </View>
-    ) : (
-      <Image
-        source={{ uri: mediaUrl }}
-        style={styles.image}
-        resizeMode="contain"
-      />
-    )}
-  </TouchableOpacity>
-) : null}
+                </View>
+              ) : (
+                <Image
+                  source={{ uri: mediaUrl }}
+                  style={styles.image}
+                  resizeMode="contain"
+                />
+              )}
+            </TouchableOpacity>
+          ) : null}
           <View style={styles.divider} />
 
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 5, height: 40 }}>

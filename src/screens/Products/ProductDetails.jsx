@@ -878,11 +878,10 @@ const styles = StyleSheet.create({
 
   description: {
     color: 'black',
-    fontSize: 14,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 22,
     textAlign: 'justify',
     paddingHorizontal: 10
-
   },
   productDescription: {
     color: '#555',

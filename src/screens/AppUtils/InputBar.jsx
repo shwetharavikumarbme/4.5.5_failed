@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Image,
   Pressable,
+  Text,
 } from 'react-native';
 import apiClient from '../ApiClient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -18,6 +19,7 @@ import femaleImage from '../../images/homepage/female.jpg';
 import companyImage from '../../images/homepage/buliding.jpg'
 import { useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
+import { generateAvatarFromName } from '../helperComponents.jsx/useInitialsAvatar';
 const defaultImageUriCompany = Image.resolveAssetSource(companyImage).uri;
 const defaultImageUriFemale = Image.resolveAssetSource(femaleImage).uri;
 const defaultImageUriMale = Image.resolveAssetSource(maleImage).uri;
@@ -156,46 +158,41 @@ const CommentInputBar = ({
 
   const getSignedUrlForComment = async (comment) => {
     if (!comment.fileKey) {
-      let defaultImageUri = defaultImageUriMale;
-
-      if (profile.user_type === 'company') {
-        defaultImageUri = defaultImageUriCompany;
-      } else if (profile.user_gender === 'Female') {
-        defaultImageUri = defaultImageUriFemale;
-      }
-
+      const name = comment.author || 'Unknown';
+      const avatarProps = generateAvatarFromName(name);
+  
       return {
         ...comment,
-        signedUrl: defaultImageUri,
+        avatarProps, // fallback to initials-based avatar
       };
     }
-
+  
     try {
       const res = await apiClient.post('/getObjectSignedUrl', {
         command: 'getObjectSignedUrl',
         key: comment.fileKey,
       });
-
+  
       if (typeof res.data === 'string' && res.data.startsWith('http')) {
         return {
           ...comment,
           signedUrl: res.data,
         };
       }
-
+  
       if (res?.data?.status === 'success' && res.data.response?.signedUrl) {
         return {
           ...comment,
           signedUrl: res.data.response.signedUrl,
         };
       }
-
     } catch (e) {
       // Optional: add logging if needed
     }
-
+  
     return comment;
   };
+  
 
   const handleNavigate = () => {
     closeSheet();
@@ -213,17 +210,36 @@ const CommentInputBar = ({
 
     <View style={styles.container}>
       <View style={styles.inputWrapper}>
-        <TouchableOpacity onPress={() => handleNavigate()}>
-          <Image
-            source={{ uri: profile?.imageUrl }}
-            style={{
-              width: 35,
-              height: 35,
-              borderRadius: 20,
-              marginRight: 10
-            }}
-          />
-        </TouchableOpacity>
+      <TouchableOpacity onPress={() => handleNavigate()}>
+  {profile?.fileKey ? (
+    <Image
+      source={{ uri: profile?.imageUrl }}
+      style={{
+        width: 35,
+        height: 35,
+        borderRadius: 20,
+        marginRight: 10,
+      }}
+    />
+  ) : (
+    <View
+      style={{
+        width: 35,
+        height: 35,
+        borderRadius: 20,
+        marginRight: 10,
+        backgroundColor: profile?.companyAvatar?.backgroundColor || '#ccc',
+        justifyContent: 'center',
+        alignItems: 'center',
+      }}
+    >
+      <Text style={{ color: profile?.companyAvatar?.textColor || '#000',fontWeight:'bold' }}>
+        {profile?.companyAvatar?.initials || '?'}
+      </Text>
+    </View>
+  )}
+</TouchableOpacity>
+
         <TextInput
           ref={inputRef}
           style={styles.input}

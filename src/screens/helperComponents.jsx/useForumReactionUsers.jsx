@@ -5,6 +5,7 @@ import { Image } from 'react-native';
 import maleImage from '../../images/homepage/dummy.png';
 import femaleImage from '../../images/homepage/female.jpg';
 import companyImage from '../../images/homepage/buliding.jpg';
+import { generateAvatarFromName } from './useInitialsAvatar';
 
 const defaultImageUriCompany = Image.resolveAssetSource(companyImage).uri;
 const defaultImageUriFemale = Image.resolveAssetSource(femaleImage).uri;
@@ -17,32 +18,44 @@ export const useForumReactionUsers = (forumId) => {
   const [currentReactionType, setCurrentReactionType] = useState('All');
 
   const enrichWithProfileUrls = async (users) => {
-    const signedUrlPromises = users.map((user) =>
-      user.fileKey ? getSignedUrl(user.user_id, user.fileKey) : Promise.resolve(null)
+    // Process each user to include either profile URL or avatar initials
+    const enrichedUsers = await Promise.all(
+        users.map(async (user) => {
+            // If no fileKey exists, generate avatar initials immediately
+            if (!user.fileKey) {
+                return {
+                    ...user,
+                    userAvatar: generateAvatarFromName(user.author) // Using author name for avatar
+                };
+            }
+
+            try {
+                // Attempt to get signed URL
+                const signedUrl = await getSignedUrl(user.user_id, user.fileKey);
+                const profileUrl = signedUrl?.[user.user_id] || null;
+
+                // If we got a valid URL, return with that
+                if (profileUrl) {
+                    return {
+                        ...user,
+                        profileUrl
+                    };
+                }
+            } catch (error) {
+                console.warn(`Failed to fetch signed URL for user ${user.user_id}:`, error);
+            }
+
+            // Fallback to avatar if signed URL fetch failed
+            return {
+                ...user,
+                userAvatar: generateAvatarFromName(user.author)
+            };
+        })
     );
 
-    const signedUrlsList = await Promise.all(signedUrlPromises);
-
-    return users.map((user, index) => {
-      const signedUrl = signedUrlsList[index];
-      let profileUrl = signedUrl?.[user.user_id] || '';
-
-      if (!profileUrl) {
-        if (user.user_type === 'company') {
-          profileUrl = defaultImageUriCompany;
-        } else if (user.user_gender === 'Female') {
-          profileUrl = defaultImageUriFemale;
-        } else {
-          profileUrl = defaultImageUriMale;
-        }
-      }
-
-      return {
-        ...user,
-        profileUrl,
-      };
-    });
-  };
+    return enrichedUsers;
+};
+  
 
   const fetchUsers = useCallback(async (reactionType = 'All', highlightReactId = null) => {
     if (!forumId) return;
@@ -59,7 +72,7 @@ export const useForumReactionUsers = (forumId) => {
   
       let rawUsers = response.data.user_reactions || [];
       const highlightedUser = response.data.reaction_id_response || null;
-console.log('rawUsers',rawUsers)
+
       if (highlightedUser) {
         const highlightId = highlightedUser.reaction_id;
         rawUsers = rawUsers.filter((u) => u.reaction_id !== highlightId);

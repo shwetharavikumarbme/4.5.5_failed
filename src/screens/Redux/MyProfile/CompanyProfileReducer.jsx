@@ -1,11 +1,4 @@
-import company from '../../../images/homepage/buliding.jpg';
-import maleImage from '../../../images/homepage/dummy.png';
-import femaleImage from '../../../images/homepage/female.jpg';
-import { Image } from 'react-native';
-
-const defaultLogo = Image.resolveAssetSource(company).uri;
-const defaultMaleImage = Image.resolveAssetSource(maleImage).uri;
-const defaultFemaleImage = Image.resolveAssetSource(femaleImage).uri;
+import { generateAvatarFromName } from "../../helperComponents.jsx/useInitialsAvatar";
 
 const initialState = {
   profile: null,
@@ -17,19 +10,14 @@ const CompanyReducer = (state = initialState, action) => {
       const incoming = action.payload || {};
       const current = state.profile || {};
 
-      let imageUrl = null;
+      // Determine imageUrl only if fileKey is present and non-empty
+      const hasFileKey = incoming.fileKey?.trim();
+      const imageUrl = hasFileKey ? incoming.imageUrl || null : null;
 
-      if (!incoming.fileKey || incoming.fileKey.trim() === '') {
-        if (incoming.user_type === 'company') {
-          imageUrl = defaultLogo;
-        } else if (incoming.gender?.toLowerCase() === 'female') {
-          imageUrl = defaultFemaleImage;
-        } else {
-          imageUrl = defaultMaleImage;
-        }
-      } else {
-        imageUrl = incoming.imageUrl || null;
-      }
+      // Always generate avatar based on priority
+      const fullName = `${incoming.first_name || ''} ${incoming.last_name || ''}`.trim();
+      const avatarName = incoming.company_name?.trim() || fullName || 'BME';
+      const companyAvatar = generateAvatarFromName(avatarName);
 
       return {
         ...state,
@@ -37,6 +25,7 @@ const CompanyReducer = (state = initialState, action) => {
           ...current,
           ...incoming,
           imageUrl,
+          companyAvatar,
         },
       };
     }

@@ -270,21 +270,28 @@ const CompanySettingScreen = () => {
               <TouchableOpacity style={styles.editProfileButton} onPress={handleUpdate}>
                 <Text style={styles.editProfileText}>Edit Profile</Text>
               </TouchableOpacity>
-
-              <View style={styles.imageContainer}>
-                <TouchableOpacity
+              <TouchableOpacity
                   activeOpacity={1}
                   onPress={() => { navigation.navigate("CompanyProfile") }}
+                  style={styles.imageContainer}
                 >
-                  <FastImage
-                    source={{ uri: profile?.imageUrl }}
-                    style={styles.detailImage}
-                    resizeMode={FastImage.resizeMode.cover}
-                    onError={() => { }}
-                  />
-
+             
+                  {profile?.imageUrl ? (
+                    <FastImage
+                      source={{ uri: profile?.imageUrl, priority: FastImage.priority.normal }}
+                      cache="immutable"
+                      style={styles.detailImage}
+                      resizeMode='contain'
+                      onError={() => { }}
+                    />
+                  ) : (
+                    <View style={[styles.avatarContainer, { backgroundColor: profile?.companyAvatar?.backgroundColor }]}>
+                      <Text style={[styles.avatarText, { color: profile?.companyAvatar?.textColor }]}>
+                        {profile?.companyAvatar?.initials}
+                      </Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
-              </View>
               <View style={styles.profileDetails}>
 
                 <View style={styles.title1}>
@@ -470,7 +477,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
 
   },
-
+  avatarContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 100,
+  },
+  avatarText: {
+    fontSize: 50,
+    fontWeight: 'bold',
+  },
+  avatarTextMini:{
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
   label: {
     flex: 1,
     color: 'black',

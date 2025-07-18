@@ -29,6 +29,9 @@ import { EventRegister } from 'react-native-event-listeners';
 import AppStyles from '../../assets/AppStyles';
 import { actions, RichEditor, RichToolbar } from 'react-native-pell-rich-editor';
 import { cleanForumHtml } from './forumBody';
+import { MediaPreview } from '../helperComponents.jsx/MediaPreview';
+import { MediaPickerButton } from '../helperComponents.jsx/MediaPickerButton';
+import { useMediaPicker } from '../helperComponents.jsx/MediaPicker';
 
 async function uriToBlob(uri) {
   const response = await fetch(uri);
@@ -46,7 +49,10 @@ const ForumPostScreen = () => {
   const profile = useSelector(state => state.CompanyProfile.profile);
   const { myId, myData } = useNetwork();
 
-  const overlayRef = useRef();
+  const [file, setFile] = useState(null);
+  const [fileType, setFileType] = useState('');
+  const [mediaMeta, setMediaMeta] = useState(null);
+
   const navigation = useNavigation();
   const [postData, setPostData] = useState({
     body: '',
@@ -57,8 +63,7 @@ const ForumPostScreen = () => {
   const [showModal, setShowModal] = useState(false);
   const scrollViewRef = useRef(null);
   const [thumbnailUri, setThumbnailUri] = useState(null);
-  const [file, setFile] = useState(null);
-  const [fileType, setFileType] = useState('');
+
   const [loading, setLoading] = useState(false);
   const defaultLogo = Image.resolveAssetSource(defaultImage).uri;
 
@@ -107,147 +112,35 @@ const ForumPostScreen = () => {
 
   useEffect(() => {
 
-    const isValid = postData.body.trim().length > 0;
+    const plainText = stripHtmlTags(postData.body); // already defined
+    const isValid = plainText.trim().length > 0;
+
     setIsFormValid(isValid);
   }, [postData.body]);
 
-  const handleMediaSelection = () => {
-    const mediaOptions = [
-      { text: "Image", onPress: openGallery },
-      { text: "Video", onPress: handleVideoPick },
-    ];
-
-    if (postData.fileKey) {
-      mediaOptions.push({ text: "Remove", onPress: handleRemoveMedia });
-    }
-
-    mediaOptions.push({ text: "Cancel", style: "cancel" });
-
-    if (Platform.OS === 'ios') {
-      // iOS Action Sheet
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: mediaOptions.map(option => option.text),
-          cancelButtonIndex: mediaOptions.length - 1, // Last item is Cancel
-          destructiveButtonIndex: postData.fileKey ? mediaOptions.length - 2 : undefined, // If "Remove" exists, mark it destructive
-        },
-        (buttonIndex) => {
-          const selectedOption = mediaOptions[buttonIndex];
-          if (selectedOption && selectedOption.onPress) {
-            selectedOption.onPress();
-          }
-        }
-      );
-    } else {
-      // Android Alert
-      Alert.alert(
-        "Select Media",
-        "Choose an option",
-        mediaOptions,
-      );
-    }
-  };
-
-  const [mediaMeta, setMediaMeta] = useState(null); // Add this to your component state
+  const {
+    showMediaOptions,
+    isCompressing,
+    overlayRef,
+  } = useMediaPicker({
+    onMediaSelected: (file, meta) => {
+      setFile(file);
+      setFileType(file.type);
+      setMediaMeta(meta);
+    },
+    includeDocuments: false, // No document option for forum posts
+    includeCamera: true,     // Include camera option
+    mediaType: 'mixed',      // Allow both photos and videos
+    maxImageSizeMB: 5,
+    maxVideoSizeMB: 10,
+  });
 
 
-  const openGallery = async () => {
-    try {
-      const options = {
-        mediaType: 'photo',
-        quality: 1,
-        selectionLimit: 1,
-      };
-
-      launchImageLibrary(options, async (response) => {
-        if (response.didCancel) {
-
-          return;
-        }
-        if (response.errorCode) {
-          return;
-        }
-
-        const asset = response.assets[0];
-
-        let fileType = asset.type || '';
-        if (!fileType.startsWith('image/')) {
-
-          showToast("Please select a valid image file", 'error');
-
-          return;
-        }
-
-        if (fileType === 'image/heic' || fileType === 'image/heif') {
-          fileType = 'image/jpeg';
-        }
-
-        const originalFilePath = asset.uri.replace('file://', '');
-        const originalStats = await RNFS.stat(originalFilePath);
-        const originalFileSize = originalStats.size;
-
-        const compressedImage = await ImageResizer.createResizedImage(
-          asset.uri,
-          1080,
-          1080,
-          'JPEG',
-          70
-        );
-
-        const compressedFilePath = compressedImage.uri.replace('file://', '');
-        const compressedStats = await RNFS.stat(compressedFilePath);
-        const compressedFileSize = compressedStats.size;
-
-        if (compressedFileSize > 5 * 1024 * 1024) {
-
-          showToast("Image size shouldn't exceed 5MB", 'error');
-
-          return;
-        }
-
-        setFile({
-          uri: compressedImage.uri,
-          type: 'image/jpeg',
-          name: asset.fileName ? asset.fileName.replace(/\.[^/.]+$/, '.jpeg') : 'image.jpeg',
-        });
-        setFileType('image/jpeg');
-        setMediaMeta({
-          originalSize: originalFileSize,
-          compressedSize: compressedFileSize,
-          width: asset.width,
-          height: asset.height,
-          fileName: asset.fileName,
-          type: fileType,
-        });
-
-
-      });
-    } catch (error) {
-
-      showToast(error.message, 'error');
-
-    }
-  };
 
 
   const playIcon = require('../../images/homepage/PlayIcon.png');
 
-  const [isCompressing, setIsCompressing] = useState(false);
   const [capturedThumbnailUri, setCapturedThumbnailUri] = useState(null);
-
-
-  const handleVideoPick = async () => {
-    const videoMeta = await selectVideo({
-      isCompressing,
-      setIsCompressing,
-      setThumbnailUri,
-      setCapturedThumbnailUri,
-      setFile,
-      setFileType,
-      overlayRef,
-      setMediaMeta, // Add this
-    });
-  };
 
 
 
@@ -297,12 +190,11 @@ const ForumPostScreen = () => {
   };
 
   const handleRemoveMedia = () => {
-
     setFile(null);
-    setFileType(null);
-    postData.fileKey = null;
-
+    setFileType('');
+    setMediaMeta(null);
   };
+
 
 
 
@@ -400,18 +292,21 @@ const ForumPostScreen = () => {
   const stripHtmlTags = (html) =>
     html?.replace(/<\/?[^>]+(>|$)/g, '').trim() || '';
 
+  const sanitizeHtmlBody = (html) => {
+    const cleaned = cleanForumHtml(html); // your existing cleaner
+
+    return cleaned
+      .replace(/<div><br><\/div>/gi, '') // remove empty line divs
+      .replace(/<p>(&nbsp;|\s)*<\/p>/gi, '') // remove empty p tags
+      .replace(/<div>(&nbsp;|\s)*<\/div>/gi, '') // remove empty divs
+      .trim(); // trim outer whitespace
+  };
 
   const handleBodyChange = (html) => {
-    // Trim leading spaces
-    const cleanedHtml = html.replace(/(<p>\s+|^ )/, (match) => {
-      showToast("Leading spaces are not allowed", 'error');
-      return match.trimStart();
-    });
-
-    const sanitizedHtml = cleanForumHtml(cleanedHtml);
-
+    const sanitizedHtml = sanitizeHtmlBody(html);
     setPostData((prev) => ({ ...prev, body: sanitizedHtml }));
   };
+
 
 
 
@@ -424,9 +319,9 @@ const ForumPostScreen = () => {
     try {
       setHasChanges(false);
 
-      const sanitizedBody = cleanForumHtml(postData.body);
-
+      const sanitizedBody = sanitizeHtmlBody(postData.body);
       const plainText = stripHtmlTags(sanitizedBody);
+
       if (!plainText.trim()) {
         showToast("Description is mandatory", "info");
         return;
@@ -536,7 +431,7 @@ const ForumPostScreen = () => {
 
 
       <KeyboardAwareScrollView
-        contentContainerStyle={{ flexGrow: 1,paddingBottom:'20%' }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: '20%' }}
         keyboardShouldPersistTaps="handled"
         extraScrollHeight={20}
         onScrollBeginDrag={() => Keyboard.dismiss()}
@@ -545,14 +440,33 @@ const ForumPostScreen = () => {
 
         <View style={styles.profileContainer}>
           <View style={styles.imageContainer}>
-
-            <FastImage
-              source={{ uri: profile?.imageUrl }}
-              style={styles.detailImage}
-              resizeMode={FastImage.resizeMode.cover}
-              onError={() => { }}
-            />
-
+            {profile?.fileKey && profile?.imageUrl ? (
+              <Image
+                source={{ uri: profile?.imageUrl }}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  marginRight: 10,
+                }}
+              />
+            ) : (
+              <View
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  marginRight: 10,
+                  backgroundColor: profile?.companyAvatar?.backgroundColor || '#ccc',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: profile?.companyAvatar?.textColor || '#000', fontWeight: 'bold' }}>
+                  {profile?.companyAvatar?.initials || '?'}
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.profileTextContainer}>
@@ -617,33 +531,6 @@ const ForumPostScreen = () => {
         />
 
 
-
-        {file && (
-          <View style={[styles.view, { marginTop: 10, width: '100%', height: 250, borderRadius: 8, overflow: 'hidden', }]}>
-            <TouchableOpacity onPress={clearFile} style={styles.removeMediaButton}>
-              <Ionicons name="close" size={20} color="black" />
-            </TouchableOpacity>
-
-            {fileType.startsWith('image') && (
-              <Image
-                source={{ uri: file.uri }}
-                style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
-              />
-            )}
-
-            {fileType.startsWith('video') && (
-              <Video
-                source={{ uri: file.uri }}
-                style={{ width: '100%', height: '100%', }}
-                muted
-                controls
-                resizeMode="contain"
-              />
-            )}
-          </View>
-        )}
-
-
         <PlayOverlayThumbnail
           ref={overlayRef}
           thumbnailUri={thumbnailUri}
@@ -651,49 +538,20 @@ const ForumPostScreen = () => {
 
         />
 
+        <MediaPreview
+          uri={file?.uri}
+          type={fileType}
+          name={file?.name}
+          onRemove={handleRemoveMedia}
+        />
+
         {!file && (
-          <TouchableOpacity
-            activeOpacity={1}
-            style={styles.uploadButton}
-            onPress={handleMediaSelection}
-          >
-            <Icon name="cloud-upload-outline" size={30} color="#000" />
-            <Text style={{ color: 'black', fontSize: 12 }}>Click to upload </Text>
-            <Text style={{ color: 'black', textAlign: 'center', fontSize: 12 }}>Supported formats JPG, PNG, WEBP, MP4 </Text>
-            <Text style={{ color: 'black', fontSize: 12, textAlign: 'center' }}>(images 5MB, videos 10MB) </Text>
-
-
-          </TouchableOpacity>
+          <MediaPickerButton
+            onPress={() => showMediaOptions()}
+            isLoading={isCompressing}
+          />
         )}
 
-
-        <View style={AppStyles.UpdateContainer}>
-          <TouchableOpacity
-            onPress={handlePostSubmission}
-            style={[
-              AppStyles.buttonContainer1,
-              !isFormValid || loading || isCompressing ? styles.disabledButton : null,
-            ]}
-            disabled={!isFormValid || loading || isCompressing}
-          >
-            {loading || isCompressing ? (
-              <ActivityIndicator size="small" />
-            ) : (
-              <Text
-                style={[
-                  styles.buttonText1,
-                  (!isFormValid || loading || isCompressing) && { color: '#fff' },
-                ]}
-              >
-                Post
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => navigation.goBack()} style={[AppStyles.cancelBtn,]}>
-            <Text style={[styles.buttonTextdown, { color: '#FF0000' }]}  >Cancel</Text>
-          </TouchableOpacity>
-        </View>
 
       </KeyboardAwareScrollView>
 

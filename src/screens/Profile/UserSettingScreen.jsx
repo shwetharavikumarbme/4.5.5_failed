@@ -240,11 +240,21 @@ const UserSettingScreen = () => {
           activeOpacity={0.8}
         >
           <View style={styles.miniLeft}>
-            <FastImage
-              source={{ uri: profile?.imageUrl }}
-              style={styles.miniImage}
-              resizeMode={FastImage.resizeMode.cover}
-            />
+             {profile?.imageUrl ? (
+                    <FastImage
+                      source={{ uri: profile?.imageUrl, priority: FastImage.priority.normal }}
+                      cache="immutable"
+                      style={styles.detailImage}
+                      resizeMode='contain'
+                      onError={() => { }}
+                    />
+                  ) : (
+                    <View style={[styles.miniImage, { backgroundColor: profile?.companyAvatar?.backgroundColor }]}>
+                      <Text style={[styles.avatarTextMini, { color: profile?.companyAvatar?.textColor }]}>
+                        {profile?.companyAvatar?.initials}
+                      </Text>
+                    </View>
+                  )}
             <Text style={styles.miniName}>
               {profile?.first_name?.trim()} {profile?.last_name}
             </Text>
@@ -272,20 +282,30 @@ const UserSettingScreen = () => {
                 <Text style={styles.editProfileText}>Edit Profile</Text>
               </TouchableOpacity>
 
-              <View style={styles.imageContainer}>
+        
                 <TouchableOpacity
                   activeOpacity={1}
                   onPress={() => { navigation.navigate("UserProfile") }}
+                  style={styles.imageContainer}
                 >
-                  <FastImage
-                    source={{ uri: profile?.imageUrl }}
-                    style={styles.detailImage}
-                    resizeMode={FastImage.resizeMode.cover}
-                    onError={() => { }}
-                  />
-
+             
+                  {profile?.imageUrl ? (
+                    <FastImage
+                      source={{ uri: profile?.imageUrl, priority: FastImage.priority.normal }}
+                      cache="immutable"
+                      style={styles.detailImage}
+                      resizeMode='contain'
+                      onError={() => { }}
+                    />
+                  ) : (
+                    <View style={[styles.avatarContainer, { backgroundColor: profile?.companyAvatar?.backgroundColor }]}>
+                      <Text style={[styles.avatarText, { color: profile?.companyAvatar?.textColor }]}>
+                        {profile?.companyAvatar?.initials}
+                      </Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
-              </View>
+       
               <View style={styles.profileDetails}>
 
                 <View style={styles.title1}>
@@ -402,12 +422,13 @@ const styles = StyleSheet.create({
     height: 140,
     borderRadius: 80,
     marginBottom: 10,
+    overflow: 'hidden',
+
   },
   detailImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 80,
-    overflow: 'hidden',
+    borderRadius: 100,
 
   },
   label: {
@@ -636,6 +657,8 @@ const styles = StyleSheet.create({
   miniLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    
+    borderRadius:40
   },
 
   miniImage: {
@@ -643,9 +666,11 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     marginRight: 10,
-    borderWidth: 1.2,
-    borderColor: '#7baee9',
-    backgroundColor: '#e6f0ff',
+    // borderWidth: 1.2,
+    // borderColor: '#7baee9',
+    // backgroundColor: '#e6f0ff',
+    alignItems: 'center',
+    justifyContent:'center'
   },
 
   miniName: {
@@ -656,8 +681,21 @@ const styles = StyleSheet.create({
 
   },
 
-
-
+  avatarContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  avatarText: {
+    fontSize: 50,
+    fontWeight: 'bold',
+  },
+  avatarTextMini:{
+    fontSize: 18,
+    fontWeight: 'bold',
+  }
 });
 
 export default UserSettingScreen;

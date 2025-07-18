@@ -15,6 +15,7 @@ import { useNetwork } from '../AppUtils/IdProvider';
 import { useConnection } from '../AppUtils/ConnectionProvider';
 import { getSignedUrl, highlightMatch, useLazySignedUrls } from '../helperComponents.jsx/signedUrls';
 import AppStyles from '../../assets/AppStyles';
+import { generateAvatarFromName } from '../helperComponents.jsx/useInitialsAvatar';
 
 const defaultImage = Image.resolveAssetSource(default_image).uri;
 const CompanyListScreen = () => {
@@ -68,9 +69,22 @@ const CompanyListScreen = () => {
         return;
       }
 
+      // Only add avatar data to companies that don't have a fileKey
+      const companiesWithAvatars = companies.map(company => {
+        // If fileKey exists, return the company as-is
+        if (company.fileKey) {
+          return company;
+        }
+        // Otherwise, add generated avatar
+        return {
+          ...company,
+          companyAvatar: generateAvatarFromName(company.company_name)
+        };
+      });
+
       setCompanies(prev => {
         const existingIds = new Set(prev.map(c => c.company_id));
-        const newUniqueCompanies = companies.filter(c => !existingIds.has(c.company_id));
+        const newUniqueCompanies = companiesWithAvatars.filter(c => !existingIds.has(c.company_id));
         return [...prev, ...newUniqueCompanies];
       });
 
@@ -173,17 +187,28 @@ const CompanyListScreen = () => {
       const count = res?.data?.count || companies.length;
       scrollViewRef.current?.scrollToOffset({ offset: 0, animated: true });
 
-      // Fetch signed URLs
-      const urlPromises = companies.map(company =>
+      // Only fetch signed URLs for companies that have a fileKey
+      const companiesWithFileKey = companies.filter(company => company.fileKey);
+      const urlPromises = companiesWithFileKey.map(company =>
         getSignedUrl(company.company_id, company.fileKey)
       );
       const signedUrlsArray = await Promise.all(urlPromises);
       const signedUrlMap = Object.assign({}, ...signedUrlsArray);
 
-      const companiesWithImage = companies.map(company => ({
-        ...company,
-        imageUrl: signedUrlMap[company.company_id] || defaultImage,
-      }));
+      // Process companies with conditional avatar generation
+      const companiesWithImage = companies.map(company => {
+        const baseCompany = {
+          ...company,
+          // Only set imageUrl if fileKey exists
+          imageUrl: company.fileKey ? (signedUrlMap[company.company_id] || defaultImage) : null,
+        };
+
+        // Only add avatar if no fileKey exists
+        return company.fileKey ? baseCompany : {
+          ...baseCompany,
+          companyAvatar: generateAvatarFromName(company.company_name)
+        };
+      });
 
       setSearchResults(companiesWithImage);
       setSearchCount(count);
@@ -193,7 +218,6 @@ const CompanyListScreen = () => {
       showToast('Something went wrong. Please try again.', 'error');
     } finally {
       setSearchTriggered(true);
-
     }
   };
 
@@ -243,13 +267,24 @@ const CompanyListScreen = () => {
       <TouchableOpacity activeOpacity={1} style={{ paddingHorizontal: 10 }}>
         <TouchableOpacity style={styles.card} activeOpacity={1} onPress={() => navigateToDetails(item)} >
 
-          <TouchableOpacity style={styles.cardImage1} onPress={() => navigateToDetails(item)} activeOpacity={0.8} >
-            <FastImage
-              source={{ uri: imageUrl }}
-              style={styles.cardImage}
-              resizeMode={resizeMode}
-              onError={() => { }}
-            />
+          <TouchableOpacity style={AppStyles.cardImage1} onPress={() => navigateToDetails(item)} activeOpacity={0.8} >
+      
+            {imageUrl ? (
+              <FastImage
+                source={{ uri: imageUrl, priority: FastImage.priority.normal }}
+                cache="immutable"
+                style={AppStyles.cardImage}
+                resizeMode={resizeMode}
+                onError={() => { }}
+              />
+            ) : (
+              <View style={[AppStyles.avatarContainer, { backgroundColor: item.companyAvatar?.backgroundColor }]}>
+                <Text style={[AppStyles.avatarText, { color: item.companyAvatar?.textColor }]}>
+                  {item.companyAvatar?.initials}
+                </Text>
+              </View>
+            )}
+     
           </TouchableOpacity>
           <View style={styles.textContainer}>
             {myId === item.company_id && (

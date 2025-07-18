@@ -5,267 +5,276 @@ import maleImage from '../../images/homepage/dummy.png';
 import femaleImage from '../../images/homepage/female.jpg';
 import companyImage from '../../images/homepage/buliding.jpg';
 import FastImage from 'react-native-fast-image';
-import { getSignedUrl } from './signedUrls';
+import { getSignedUrl, useLazySignedUrls } from './signedUrls';
+import { generateAvatarFromName } from './useInitialsAvatar';
 
 const defaultImageUriCompany = Image.resolveAssetSource(companyImage).uri;
 const defaultImageUriFemale = Image.resolveAssetSource(femaleImage).uri;
 const defaultImageUriMale = Image.resolveAssetSource(maleImage).uri;
 
+const cacheLimit = 50;
+const cacheTTL = 10 * 60 * 1000; // 5 minutes
+
 
 export const fetchMediaForPost = async (input) => {
-    const posts = Array.isArray(input) ? input : [input];
-    const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.webm'];
-  
-    const getAspectRatio = async (uri) => {
-      return new Promise((resolve) => {
-        Image.getSize(uri, (width, height) => resolve(width / height), () => resolve(1));
-      });
-    };
-  
-    const getAuthorImage = async (post) => {
-      let authorImageUrl = null;
-  
-      if (post.author_fileKey) {
-        try {
-          const res = await getSignedUrl('author', post.author_fileKey);
-          authorImageUrl = res?.author || res?.url;
-        } catch (err) {
-          console.error('Failed to fetch author image:', err);
-        }
-      }
-  
-      if (!authorImageUrl) {
-        const userType = (post.user_type || '').toLowerCase();
-        const gender = (post.author_gender || '').toLowerCase();
-        
-        if (userType === 'company') return defaultImageUriCompany;
-        if (userType === 'users' && gender === 'female') return defaultImageUriFemale;
-        return defaultImageUriMale;
-      }
-  
-      return authorImageUrl;
-    };
-  
-    const results = await Promise.all(
-      posts.map(async (post) => {
-        const mediaData = { forum_id: post.forum_id };
-        const fileKey = post.fileKey?.toLowerCase();
-  
-        if (fileKey) {
-          try {
-            const res = await getSignedUrl('file', post.fileKey);
-            const url = res?.file || res?.url;
-  
-            if (url) {
-              const isVideo = videoExtensions.some(ext => fileKey.endsWith(ext));
-  
-              if (isVideo) {
-                mediaData.videoUrl = url;
-  
-                if (post.thumbnail_fileKey) {
-                  try {
-                    const thumbRes = await getSignedUrl('thumb', post.thumbnail_fileKey);
-                    mediaData.thumbnailUrl = thumbRes?.thumb || null;
-                  } catch {
-                    mediaData.thumbnailUrl = null;
-                  }
-                }
-  
-                mediaData.aspectRatio = mediaData.thumbnailUrl
-                  ? await getAspectRatio(mediaData.thumbnailUrl)
-                  : 1;
-              } else {
-                mediaData.imageUrl = url;
-                mediaData.aspectRatio = await getAspectRatio(url);
-              }
-            }
-          } catch {
-            mediaData.imageUrl = null;
-            mediaData.videoUrl = null;
-            mediaData.thumbnailUrl = null;
-            mediaData.aspectRatio = 1;
-          }
-        }
-  
-        mediaData.authorImageUrl = await getAuthorImage(post);
-        return { ...post, ...mediaData };
-      })
-    );
-  
-    return Array.isArray(input) ? results : results[0];
+  const posts = Array.isArray(input) ? input : [input];
+  const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.webm'];
+
+  const getAuthorImage = async (post) => {
+    if (post.author_fileKey) {
+      const res = await getSignedUrl('author', post.author_fileKey);
+      return res?.author || res?.url || null;
+    }
+    return null;
   };
-  
-  export const useLazySignedUrlsForum = (
-    allItems = [],
-    getSignedUrl,
-    prefetchCount = 5,
-    {
-      idField = 'post_id',
-      fileKeyField = 'fileKey',
-      authorFileKeyField = 'author_fileKey'
-    } = {},
-    isFocused,
-    isPageFocused,
-    activeVideo,
-    setActiveVideo
-  ) => {
-    const signedUrlCache = useRef({});
-    const authorImageCache = useRef({});
-    const viewedForumIdsRef = useRef(new Set());
-  
-    const getDefaultAuthorImage = (item) => {
-      const userType = (item.user_type || '').toLowerCase();
-      const gender = (item.author_gender || '').toLowerCase();
-      if (userType === 'company') return defaultImageUriCompany;
-      if (userType === 'users' && gender === 'female') return defaultImageUriFemale;
-      return defaultImageUriMale;
-    };
-  
-    const getUrlFor = useCallback((id) => {
-        const mediaEntry = signedUrlCache.current[id];
-        return {
-          mediaUrl: mediaEntry?.mediaUrl || defaultImageUriCompany,
-          aspectRatio: mediaEntry?.aspectRatio || 1,
-          thumbnailUrl: mediaEntry?.thumbnailUrl || null,
-          authorUrl: authorImageCache.current[id] || defaultImageUriMale,
-        };
-      }, []);
-      
-  
-      const fetchSignedUrlIfNeeded = async (item) => {
-        if (!item) return;
-      
-        const id = item[idField];
-        if (!id || signedUrlCache.current[id]) return;
-      
-        console.log(`🟢 [fetchSignedUrlIfNeeded] forum_id: ${id}`);
-      
-        try {
-          const enriched = await fetchMediaForPost(item);
-      
-          // Store full media metadata
-          signedUrlCache.current[id] = {
-            mediaUrl: enriched.videoUrl || enriched.imageUrl || defaultImageUriCompany,
-            aspectRatio: enriched.aspectRatio || 1,
-            thumbnailUrl: enriched.thumbnailUrl || null,
-          };
-      
-          authorImageCache.current[id] = enriched.authorImageUrl || getDefaultAuthorImage(item);
-      
-          // Prefetch media
-          if (signedUrlCache.current[id]?.mediaUrl) {
-            FastImage.preload([{ uri: signedUrlCache.current[id].mediaUrl }]);
+
+  const results = await Promise.all(
+    posts.map(async (post) => {
+      const mediaData = { forum_id: post.forum_id };
+      const fileKey = post.fileKey?.toLowerCase();
+
+      if (fileKey) {
+        const res = await getSignedUrl('file', post.fileKey);
+        const url = res?.file || res?.url || null;
+
+        if (url) {
+          const isVideo = videoExtensions.some(ext => fileKey.endsWith(ext));
+
+          if (isVideo) {
+            mediaData.videoUrl = url;
+
+            if (post.thumbnail_fileKey) {
+              const thumbRes = await getSignedUrl('thumb', post.thumbnail_fileKey);
+              mediaData.thumbnailUrl = thumbRes?.thumb || null;
+            } else {
+              mediaData.thumbnailUrl = null;
+            }
+          } else {
+            mediaData.imageUrl = url;
           }
-      
-          if (authorImageCache.current[id]) {
-            FastImage.preload([{ uri: authorImageCache.current[id] }]);
-          }
-      
-          console.log('✅ [Media Fetched]', id, signedUrlCache.current[id]);
-          console.log('✅ [Author Fetched]', id, authorImageCache.current[id]);
-        } catch (err) {
-          console.warn('❌ [FetchMediaForPost failed]', id, err);
-      
-          // Fallback values on error
-          signedUrlCache.current[id] = {
-            mediaUrl: defaultImageUriCompany,
-            aspectRatio: 1,
-            thumbnailUrl: null,
-          };
-      
-          authorImageCache.current[id] = getDefaultAuthorImage(item);
         }
-      };
-      
-      
-      
-  
-    const incrementViewCount = async (forumId) => {
-      try {
-        await apiClient.post('/forumViewCounts', {
-          command: 'forumViewCounts',
-          forum_id: forumId,
-        });
-      } catch (error) {
-        console.error("View count error:", error);
       }
-    };
-  
-    const onViewableItemsChanged = useRef(({ viewableItems }) => {
-      if (!isFocused || !isPageFocused || !viewableItems.length) {
-        setActiveVideo(null);
-        return;
+
+      mediaData.authorImageUrl = await getAuthorImage(post);
+
+      const enrichedPost = { ...post, ...mediaData };
+
+      return enrichedPost;
+    })
+  );
+
+  return Array.isArray(input) ? results : results[0];
+};
+
+
+export const useForumMedia = (posts, isFocused,isTabActive, setActiveVideo) => {
+  const signedUrlCache = useRef(new Map());
+  const viewedForumIdsRef = useRef(new Set());
+  const [version, setVersion] = useState(0);
+  const triggerRerender = () => setVersion(v => v + 1);
+
+  const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.webm'];
+
+  const insertIntoCache = (id, url) => {
+    const now = Date.now();
+    const cache = signedUrlCache.current;
+
+    if (cache.has(id)) cache.delete(id); // Move to end
+    cache.set(id, { url, timestamp: now });
+
+    if (cache.size > cacheLimit) {
+      const oldestKey = cache.keys().next().value;
+      cache.delete(oldestKey);
+    }
+    triggerRerender();
+  };
+
+  const getUrlFor = useCallback((id) => {
+    const cache = signedUrlCache.current;
+    const entry = cache.get(id);
+    if (!entry) return '';
+
+    const now = Date.now();
+    if (now - entry.timestamp > cacheTTL) {
+      cache.delete(id);
+      return '';
+    }
+
+    // Refresh LRU
+    cache.delete(id);
+    cache.set(id, entry);
+
+    return entry.url;
+  }, []);
+
+  const getNestedProperty = (obj, path) => {
+    if (!path) return undefined;
+    if (typeof path === 'string' && !path.includes('[')) return obj[path];
+    const parts = typeof path === 'string'
+      ? path.split(/[\[\].]/).filter(Boolean)
+      : [path];
+    return parts.reduce((acc, part) => acc && acc[part], obj);
+  };
+
+  const incrementViewCount = async (forumId) => {
+    try {
+      await apiClient.post('/forumViewCounts', {
+        command: 'forumViewCounts',
+        forum_id: forumId,
+      });
+    } catch {}
+  };
+
+  const fetchSignedUrlIfNeeded = async (item, idField, fileKeyField, thumbKeyField) => {
+    if (!item) return;
+
+    const id = getNestedProperty(item, idField);
+    const key = getNestedProperty(item, fileKeyField);
+    const thumbKey = getNestedProperty(item, thumbKeyField);
+
+    if (!id) return;
+
+    const fileCacheHit = getUrlFor(id);
+    const thumbCacheHit = getUrlFor(`${id}-thumb`);
+
+    const authorKey = getNestedProperty(item, 'author_fileKey');
+    if (authorKey && !getUrlFor(authorKey)) {
+      const res = await getSignedUrl('author', authorKey);
+      const url = res?.author || res?.url;
+      if (url) {
+        insertIntoCache(authorKey, url);
+        FastImage.preload([{ uri: url }]);
       }
-  
-      const visibleVideos = viewableItems
-        .filter(item => item.item.videoUrl && item.item.forum_id)
-        .sort((a, b) => a.index - b.index);
-  
-      if (visibleVideos.length > 0) {
-        const firstVideo = visibleVideos[0];
-        const isCurrentVisible = viewableItems.some(
-          item => item.item.forum_id === activeVideo
-        );
-  
-        if (activeVideo && !isCurrentVisible) {
-          setActiveVideo(null);
+    }
+
+    if (fileCacheHit && (!thumbKey || thumbCacheHit)) return;
+
+    if (key && !fileCacheHit) {
+      const res = await getSignedUrl(id, key);
+      const url = res?.[id];
+      if (url) {
+        insertIntoCache(id, url);
+        FastImage.preload([{ uri: url }]);
+      }
+    }
+
+    if (thumbKey && !thumbCacheHit) {
+      const thumbRes = await getSignedUrl('thumb', thumbKey);
+      const thumbUrl = thumbRes?.thumb;
+      if (thumbUrl) {
+        insertIntoCache(`${id}-thumb`, thumbUrl);
+        FastImage.preload([{ uri: thumbUrl }]);
+      }
+    }
+  };
+
+  const preloadUrls = (startIndex, endIndex) => {
+    for (let i = startIndex; i <= endIndex; i++) {
+      const item = posts[i];
+      if (!item) continue;
+      const id = item.forum_id;
+      if (id && !getUrlFor(id)) {
+        fetchSignedUrlIfNeeded(item, 'forum_id', 'fileKey', 'thumbnail_fileKey');
+      }
+    }
+  };
+
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    if (!viewableItems?.length) {
+      setActiveVideo?.(null);
+      return;
+    }
+
+    if (isFocused && isTabActive) {
+      const visibleItem = viewableItems.find(item => item.isViewable);
+      if (visibleItem) {
+        const { forum_id, fileKey } = visibleItem.item || {};
+        const isVideo = fileKey && videoExtensions.some(ext => fileKey.toLowerCase().endsWith(ext));
+
+        if (forum_id && isVideo) {
+          setActiveVideo?.(forum_id);
+        } else {
+          setActiveVideo?.(null);
         }
-  
-        if (!activeVideo || firstVideo.item.forum_id !== activeVideo) {
-          setActiveVideo(firstVideo.item.forum_id);
+
+        if (forum_id && !viewedForumIdsRef.current.has(forum_id)) {
+          viewedForumIdsRef.current.add(forum_id);
+          incrementViewCount(forum_id);
         }
       } else {
-        setActiveVideo(null);
+        setActiveVideo?.(null);
       }
-  
-      // View count
-      viewableItems.forEach(({ item }) => {
-        const forumId = item.forum_id;
-        if (forumId && !viewedForumIdsRef.current.has(forumId)) {
-          viewedForumIdsRef.current.add(forumId);
-          incrementViewCount(forumId);
-        }
-      });
-  
-      // Prefetching logic
-      const visibleIndices = viewableItems.map(({ index }) => index).filter(i => i != null);
-      if (visibleIndices.length) {
-        const maxIndex = Math.max(...visibleIndices);
-        const endIndex = Math.min(maxIndex + prefetchCount, allItems.length - 1);
-  
-        const itemsToFetch = new Set([...viewableItems.map(({ item }) => item)]);
-        for (let i = maxIndex + 1; i <= endIndex; i++) {
-          allItems[i] && itemsToFetch.add(allItems[i]);
-        }
-  
-        itemsToFetch.forEach(item => {
-          const id = item[idField];
-          if (id && (!signedUrlCache.current[id] || !authorImageCache.current[id])) {
-            fetchSignedUrlIfNeeded(item);
-          }
-        });
+    }
+
+    const visibleIndices = viewableItems.map(({ index }) => index).filter(i => i != null);
+    const maxVisibleIndex = Math.max(...visibleIndices);
+    const prefetchStart = Math.max(0, maxVisibleIndex + 1);
+    const prefetchEnd = Math.min(prefetchStart + 5, posts.length - 1);
+
+    const itemsToFetch = new Set();
+    viewableItems.forEach(({ item }) => item && itemsToFetch.add(item));
+    for (let i = prefetchStart; i <= prefetchEnd; i++) {
+      if (posts[i]) itemsToFetch.add(posts[i]);
+    }
+
+    itemsToFetch.forEach((item) => {
+      const id = item.forum_id;
+      if (id && !getUrlFor(id)) {
+        fetchSignedUrlIfNeeded(item, 'forum_id', 'fileKey', 'thumbnail_fileKey');
       }
-    }).current;
-  
-    const viewabilityConfig = {
-      itemVisiblePercentThreshold: 10,
-      waitForInteraction: false,
-    };
-  
-    useEffect(() => {
-      const initialItems = allItems.slice(0, prefetchCount);
-      initialItems.forEach(item => {
-        const id = item[idField];
-        if (id && (!signedUrlCache.current[id] || !authorImageCache.current[id])) {
-          fetchSignedUrlIfNeeded(item);
-        }
-      });
-    }, [allItems]);
-  
+    });
+
+  }).current;
+
+  const getMediaForItem = useCallback((item) => {
+    const fileKey = item.fileKey;
+    if (!fileKey) return {};
+
+    const url = getUrlFor(item.forum_id);
+    const thumb = item.thumbnail_fileKey
+      ? getUrlFor(`${item.forum_id}-thumb`)
+      : null;
+
+    if (!url) return {};
+
+    const isVideo = videoExtensions.some(ext => fileKey.toLowerCase().endsWith(ext));
     return {
-      getUrlFor,
-      onViewableItemsChanged,
-      viewabilityConfig,
+      [isVideo ? 'videoUrl' : 'imageUrl']: url,
+      thumbnailUrl: isVideo ? thumb : null,
     };
-  };
+  }, [getUrlFor]);
+
+  const getAuthorImage = useCallback((item) => {
+    if (item.author_fileKey) {
+      const url = getUrlFor(item.author_fileKey);
+      if (url) return { uri: url };
+    }
   
+    // Fallback to generated avatar
+    return generateAvatarFromName(item.author || '');
+  }, [getUrlFor]);
+  
+
+  useEffect(() => {
+    preloadUrls(0, 4);
+  }, [posts]);
+
+  const viewabilityConfig = {
+    itemVisiblePercentThreshold: 50,
+    minimumViewTime: 100,
+    waitForInteraction: false,
+  };
+
+  return {
+    getMediaForItem,
+    getAuthorImage,
+    preloadUrls,
+    onViewableItemsChanged,
+    viewabilityConfig,
+    version,
+  };
+};
+
+
+
+

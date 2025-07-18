@@ -17,8 +17,10 @@ import { useNetwork } from './AppUtils/IdProvider';
 import useFetchData from './helperComponents.jsx/HomeScreenData';
 import { useConnection } from './AppUtils/ConnectionProvider';
 import { getSignedUrl, getTimeDisplay, getTimeDisplayForum, getTimeDisplayHome } from './helperComponents.jsx/signedUrls';
-import { styles } from '../assets/AppStyles';
+import AppStyles, { styles } from '../assets/AppStyles';
 import { ForumPostBody } from './Forum/forumBody';
+import FastImage from 'react-native-fast-image';
+import { generateAvatarFromName } from './helperComponents.jsx/useInitialsAvatar';
 
 const UserSettingScreen = React.lazy(() => import('./Profile/UserSettingScreen'));
 const ProductsList = React.lazy(() => import('./Products/ProductsList'));
@@ -109,7 +111,7 @@ const UserHomeScreen = React.memo(() => {
   const renderJobCard = ({ item }) => {
     if (!item || item.isEmpty) return null;
 
-    const { post_id, job_title, experience_required, Package, job_post_created_on } = item;
+    const { post_id, job_title, experience_required, Package, job_post_created_on, companyAvatar } = item;
     const imageUrl = jobImageUrls?.[item.post_id];
 
     return (
@@ -118,11 +120,23 @@ const UserHomeScreen = React.memo(() => {
         activeOpacity={0.85}
         style={styles.eduCard}
       >
+
         <View style={styles.eduCardLeft}>
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.eduImage}
-          />
+          {imageUrl ? (
+            <FastImage
+              source={{ uri: imageUrl, priority: FastImage.priority.normal }}
+              cache="immutable"
+              style={styles.eduImage}
+              resizeMode='contain'
+              onError={() => { }}
+            />
+          ) : (
+            <View style={[AppStyles.avatarContainer, { backgroundColor: companyAvatar?.backgroundColor }]}>
+              <Text style={[AppStyles.avatarText, { color: companyAvatar?.textColor }]}>
+                {companyAvatar?.initials}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.eduCardRight}>
@@ -174,16 +188,20 @@ const UserHomeScreen = React.memo(() => {
               />
 
               <View style={styles.authorInfo}>
-                <Text style={styles.authorName}>{item.author || 'No Name'}</Text>
-
+                <Text
+                  style={styles.authorName}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {item.author || 'No Name'}
+                </Text>
                 <Text style={styles.badgeText}>{item.author_category || ''}</Text>
 
               </View>
             </View>
             <View >
-            <Text style={styles.PostedLabel}>Posted on: <Text style={styles.articleTime}>{getTimeDisplayForum(item.posted_on)}</Text></Text>
+              <Text style={styles.PostedLabel}>Posted on: <Text style={styles.articleTime}>{getTimeDisplayForum(item.posted_on)}</Text></Text>
 
-          
             </View>
 
           </View>
@@ -265,7 +283,7 @@ const UserHomeScreen = React.memo(() => {
           {(item.price ?? '').toString().trim() !== '' ? (
             <View style={styles.priceRow}>
               <Text numberOfLines={1} style={styles.price}><Icon name="currency-inr" size={16} color='#666' />
-              {item.price}</Text>
+                {item.price}</Text>
             </View>
           ) : (
             <Text style={styles.eduSubText}>₹ Not specified</Text>
@@ -307,7 +325,7 @@ const UserHomeScreen = React.memo(() => {
             <Icon name="text-box-outline" size={16} color='#666' /> {item.description || ' '}
           </Text>
 
-          <Text numberOfLines={1}  style={styles.companyNameText}>
+          <Text numberOfLines={1} style={styles.companyNameText}>
             {/* <Text style={styles.label}>Company name: </Text> */}
             <Icon name="office-building-outline" size={16} color='#666' /> {item.company_name || ' '}
           </Text>
@@ -315,7 +333,7 @@ const UserHomeScreen = React.memo(() => {
           {(item.price ?? '').toString().trim() !== '' ? (
             <View style={styles.priceRow}>
               <Text numberOfLines={1} style={styles.price}><Icon name="currency-inr" size={16} color='#666' />
-              {item.price} </Text>
+                {item.price} </Text>
             </View>
           ) : (
             <Text style={styles.eduSubText}>₹ Not specified</Text>
@@ -393,28 +411,48 @@ const UserHomeScreen = React.memo(() => {
       if (response.data.status === 'success') {
         const profileData = response.data.status_message;
 
-        try {
-          const res = await getSignedUrl('profileImage', profileData.fileKey);
-          profileData.imageUrl = res?.profileImage ?? null;
+        // Initialize profile data with avatar generation
+        const updatedProfile = { ...profileData };
 
-        } catch (err) {
-
-          profileData.imageUrl = null;
+        // Only try to get signed URL if fileKey exists
+        if (profileData.fileKey) {
+          try {
+            const res = await getSignedUrl('profileImage', profileData.fileKey);
+            updatedProfile.imageUrl = res?.profileImage ?? null;
+          } catch (err) {
+            updatedProfile.imageUrl = null;
+          }
+        } else {
+          updatedProfile.imageUrl = null;
         }
 
-        dispatch(updateCompanyProfile(profileData));
+        // Generate avatar if no image URL is available
+        if (!updatedProfile.imageUrl) {
+          const fullName = `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim();
+          if (fullName) {
+            updatedProfile.companyAvatar = generateAvatarFromName(fullName);
+          }
+        }
+
+        dispatch(updateCompanyProfile(updatedProfile));
 
       } else {
-        dispatch(updateCompanyProfile({ imageUrl: null }));
+        // Handle case when API doesn't return success
+        dispatch(updateCompanyProfile({
+          imageUrl: null,
+          companyAvatar: generateAvatarFromName('') // Default avatar
+        }));
       }
     } catch (error) {
-
-      dispatch(updateCompanyProfile({ imageUrl: null }));
+      // Handle any errors by setting default values
+      dispatch(updateCompanyProfile({
+        imageUrl: null,
+        companyAvatar: generateAvatarFromName('') // Default avatar
+      }));
     } finally {
       setIsProfileFetched(true);
     }
   };
-
 
 
 
@@ -441,6 +479,15 @@ const UserHomeScreen = React.memo(() => {
   };
 
 
+  const [visibleItem, setVisibleItem] = useState(null);
+  const viewabilityConfig = { itemVisiblePercentThreshold: 50 };
+
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    const firstVisible = viewableItems?.[0];
+    if (firstVisible?.item?.type) {
+      setVisibleItem(firstVisible.item.type);
+    }
+  }).current;
 
 
   return (
@@ -467,18 +514,25 @@ const UserHomeScreen = React.memo(() => {
 
           <TouchableOpacity onPress={handleProfile} style={styles.profileContainer} activeOpacity={0.8}>
             <View style={styles.detailImageWrapper}>
-              <Image
-                source={{ uri: profile?.imageUrl }}
-                style={styles.detailImage}
-                resizeMode="cover"
-                onError={() => {
-                  console.log('Image load error — switching to fallback.');
-
-                }}
-              />
-
+              {profile?.imageUrl ? (
+                <FastImage
+                  source={{ uri: profile?.imageUrl, priority: FastImage.priority.normal }}
+                  cache="immutable"
+                  style={styles.detailImage}
+                  resizeMode='contain'
+                  onError={() => { }}
+                />
+              ) : (
+                <View style={[styles.avatarContainer, { backgroundColor: profile?.companyAvatar?.backgroundColor }]}>
+                  <Text style={[styles.avatarText, { color: profile?.companyAvatar?.textColor }]}>
+                    {profile?.companyAvatar?.initials}
+                  </Text>
+                </View>
+              )}
             </View>
           </TouchableOpacity>
+
+
 
         </View>
 
@@ -502,14 +556,15 @@ const UserHomeScreen = React.memo(() => {
           { type: 'products', data: products },
           { type: 'services', data: services },
         ]}
-
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
 
 
         renderItem={({ item }) => {
           switch (item.type) {
 
             case 'banner1':
-              return <Banner01 />;
+              return <Banner01 isVisible={visibleItem === 'banner1'} />;
 
             case 'jobs':
               return (

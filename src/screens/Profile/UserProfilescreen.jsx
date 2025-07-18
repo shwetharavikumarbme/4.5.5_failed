@@ -176,7 +176,6 @@ const UserProfileScreen = () => {
     if (!messageTitle) return;
 
     try {
-      console.log("[Logout] Logout process started...");
 
       // Retrieve session data
       const sessionData = await AsyncStorage.getItem('userSession');
@@ -197,9 +196,6 @@ const UserProfileScreen = () => {
         command: 'logoutUserSession',
         session_id: parsedSessionData.sessionId,
       };
-
-      console.log("[Logout] Sending logout API request to /logoutUserSession...");
-      console.log("[Logout] Payload:", payload);
 
       const response = await apiClient.post(
         'https://h7l1568kga.execute-api.ap-south-1.amazonaws.com/dev/logoutUserSession',
@@ -295,17 +291,28 @@ const UserProfileScreen = () => {
 
       <ScrollView keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}  >
 
-        <View style={styles.imageContainer}>
-          <TouchableOpacity activeOpacity={1} onPress={() => openMediaViewer([{ type: 'image', url: profile?.imageUrl }])}
-            >
+
+        <TouchableOpacity activeOpacity={1} onPress={() => openMediaViewer([{ type: 'image', url: profile?.imageUrl }])}
+          style={styles.imageContainer}
+        >
+
+          {profile?.imageUrl ? (
             <FastImage
-              source={{ uri: profile?.imageUrl }}
+              source={{ uri: profile?.imageUrl, priority: FastImage.priority.normal }}
+              cache="immutable"
               style={styles.detailImage}
-              resizeMode={FastImage.resizeMode.cover}
+              resizeMode='contain'
               onError={() => { }}
             />
-          </TouchableOpacity>
-        </View>
+          ) : (
+            <View style={[styles.avatarContainer, { backgroundColor: profile?.companyAvatar?.backgroundColor }]}>
+              <Text style={[styles.avatarText, { color: profile?.companyAvatar?.textColor }]}>
+                {profile?.companyAvatar?.initials}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
 
         <View style={styles.profileBox}>
 
@@ -516,11 +523,11 @@ const UserProfileScreen = () => {
             </View>
           </Modal>
 
-   
+
         </View>
 
       </ScrollView >
-   
+
 
     </SafeAreaView >
   );
@@ -577,13 +584,14 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
     overflow: 'hidden',
     marginVertical: 20,
-    alignSelf: 'center'
+    alignSelf: 'center',
+    overflow: 'hidden',
+
   },
   detailImage: {
     width: '100%',
     height: '100%',
     borderRadius: 80,
-    overflow: 'hidden',
 
   },
   title1: {
@@ -729,7 +737,7 @@ const styles = StyleSheet.create({
     textAlign: 'justify',
     lineHeight: 23,
     marginBottom: 25,
-    fontWeight:'500'
+    fontWeight: '500'
   },
   deletionText1: {
     fontWeight: 'bold',
@@ -783,7 +791,7 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 10,
     fontWeight: 'bold',
-},
+  },
   modalContainer1: {
     width: '90%',
     backgroundColor: 'white',
@@ -879,6 +887,18 @@ const styles = StyleSheet.create({
 
   },
 
+  avatarContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  avatarText: {
+    fontSize: 50,
+    fontWeight: 'bold',
+  },
+  
 });
 
 export default UserProfileScreen

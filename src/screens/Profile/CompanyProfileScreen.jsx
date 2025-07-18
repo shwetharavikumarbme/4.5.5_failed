@@ -23,6 +23,7 @@ import { OtpInput } from "react-native-otp-entry";
 const CompanyProfileScreen = ({ route }) => {
   const navigation = useNavigation();
   const profile = useSelector(state => state.CompanyProfile.profile);
+  console.log('profile',profile)
   const { myId } = useNetwork();
   const [isProductDropdownVisible, setProductDropdownVisible] = useState(false);
   const [isServiceDropdownVisible, setServiceDropdownVisible] = useState(false);
@@ -403,19 +404,27 @@ const CompanyProfileScreen = ({ route }) => {
 
       <ScrollView showsVerticalScrollIndicator={false} >
 
-        <View style={styles.imageContainer}>
-          <TouchableOpacity onPress={() => openMediaViewer([{ type: 'image', url: profile?.imageUrl }])}
-            activeOpacity={1}
-          >
+      <TouchableOpacity activeOpacity={1} onPress={() => openMediaViewer([{ type: 'image', url: profile?.imageUrl }])}
+          style={styles.imageContainer}
+        >
+
+          {profile?.imageUrl ? (
             <FastImage
-              source={{ uri: profile?.imageUrl }}
+              source={{ uri: profile?.imageUrl, priority: FastImage.priority.normal }}
+              cache="immutable"
               style={styles.detailImage}
-              resizeMode={FastImage.resizeMode.cover}
+              resizeMode='contain'
               onError={() => { }}
             />
+          ) : (
+            <View style={[styles.avatarContainer, { backgroundColor: profile?.companyAvatar?.backgroundColor }]}>
+              <Text style={[styles.avatarText, { color: profile?.companyAvatar?.textColor }]}>
+                {profile?.companyAvatar?.initials}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
 
-          </TouchableOpacity>
-        </View>
         <View style={styles.detailsContainer}>
           {/* Profile Details */}
           <View style={styles.title1}>
@@ -446,6 +455,14 @@ const CompanyProfileScreen = ({ route }) => {
             <Text style={styles.colon}>:</Text>
 
             <Text style={styles.value}>{(profile?.business_registration_number || "").trimStart().trimEnd()}</Text>
+          </View>
+
+          {/* select_your_profile */}
+          <View style={styles.title1}>
+            <Text style={styles.label}>Profile type      </Text>
+            <Text style={styles.colon}>:</Text>
+
+            <Text style={styles.value}>{profile?.select_your_profile || ""}</Text>
           </View>
           <View style={styles.title1}>
             <Text style={styles.label}>Category      </Text>
@@ -990,6 +1007,17 @@ const CompanyProfileScreen = ({ route }) => {
 
   },
 
+  avatarContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 100,
+  },
+  avatarText: {
+    fontSize: 50,
+    fontWeight: 'bold',
+  },
   rowContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',

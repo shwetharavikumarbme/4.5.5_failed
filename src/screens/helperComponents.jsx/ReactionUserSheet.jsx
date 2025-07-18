@@ -238,16 +238,35 @@ const ReactionSheet = forwardRef(({ onClose }, ref) => {
             animatedStyle,
           ]}
         >
-          <FastImage
-            source={{ uri: item.profileUrl }}
-            style={{
-              width: 35,
-              height: 35,
-              borderRadius: 20,
-              marginRight: 12,
-              backgroundColor: '#ddd',
-            }}
-          />
+          {item.fileKey ? (
+            <FastImage
+              source={{ uri: item.profileUrl }}
+              style={{
+                width: 35,
+                height: 35,
+                borderRadius: 20,
+                marginRight: 12,
+                backgroundColor: '#ddd',
+              }}
+            />
+          ) : (
+            <View
+              style={{
+                width: 35,
+                height: 35,
+                borderRadius: 20,
+                marginRight: 12,
+                backgroundColor: item.userAvatar?.backgroundColor || '#ccc',
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ color: item.userAvatar?.textColor || '#000', fontSize: 14, fontWeight: 'bold' }}>
+                {item.userAvatar?.initials || ''}
+              </Text>
+            </View>
+          )}
+
           <View>
             <Text style={{ fontWeight: 'bold' }}>{item.author}</Text>
             <Text style={{ fontSize: 12, color: '#555' }}>
@@ -398,7 +417,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 16,
-    paddingVertical:10,
+    paddingVertical: 10,
   },
 
   reactionTab: {

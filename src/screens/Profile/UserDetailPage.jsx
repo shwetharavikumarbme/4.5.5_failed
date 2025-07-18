@@ -11,6 +11,7 @@ import femaleImage from '../../images/homepage/female.jpg';
 import default_image1 from '../../images/homepage/image.jpg'
 import { openMediaViewer } from '../helperComponents.jsx/mediaViewer';
 import { MyPostBody } from '../Forum/forumBody';
+import { generateAvatarFromName } from '../helperComponents.jsx/useInitialsAvatar';
 
 
 
@@ -23,6 +24,7 @@ const UserDetailsPage = () => {
   const myprofile = useSelector(state => state.CompanyProfile.profile);
   const [profile, setProfile] = useState(null);
   const [imageUrl, setImageUrl] = useState(null);
+
   const route = useRoute()
   const [isModalVisibleImage, setModalVisibleImage] = useState(false);
   const { userId } = route.params;
@@ -214,42 +216,52 @@ const UserDetailsPage = () => {
   const fetchProfile = async () => {
     setLoading(true);
     try {
-      const response = await apiClient.post(
-        '/getUserDetails',
-        { command: 'getUserDetails', user_id: userId }
-      );
-
+      const response = await apiClient.post('/getUserDetails', {
+        command: 'getUserDetails',
+        user_id: userId,
+      });
+  
       if (response.data.status === 'success') {
         const profileData = response.data.status_message;
         setProfile(profileData);
-
+  
         if (profileData.fileKey && profileData.fileKey !== 'null') {
-          const res = await apiClient.post(
-            '/getObjectSignedUrl',
-            { command: 'getObjectSignedUrl', key: profileData.fileKey }
-          );
+          const res = await apiClient.post('/getObjectSignedUrl', {
+            command: 'getObjectSignedUrl',
+            key: profileData.fileKey,
+          });
           const imgUrlData = res.data;
           if (imgUrlData && typeof imgUrlData === 'string') {
             setImageUrl(imgUrlData);
           } else {
-            setImageUrl(null);
+            // fallback to generated avatar
+            const displayName =
+              profileData.company_name?.trim() ||
+              `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() ||
+              'Unknown';
+            setImageUrl(generateAvatarFromName(displayName));
           }
         } else {
-          // Set local image based on gender
-          if (profileData.gender?.toLowerCase() === 'female') {
-            setImageUrl(defaultFemaleImage);
-          } else {
-            setImageUrl(defaultMaleImage); // default to male if gender is missing or male
-          }
+          // fallback to generated avatar
+          const displayName =
+            profileData.company_name?.trim() ||
+            `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() ||
+            'Unknown';
+          setImageUrl(generateAvatarFromName(displayName));
         }
       }
     } catch (error) {
-      // Set fallback local image on error
-      setImageUrl(defaultMaleImage); // or choose based on previously stored gender info if available
+      // fallback to generated avatar on error
+      const displayName =
+        profile?.company_name?.trim() ||
+        `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() ||
+        'Unknown';
+      setImageUrl(generateAvatarFromName(displayName));
     } finally {
       setLoading(false);
     }
   };
+  
 
 
   const { width } = Dimensions.get('window');
@@ -264,17 +276,30 @@ const UserDetailsPage = () => {
   const ProfileHeader = ({ profile, imageUrl, toggleModal, isModalVisibleImage, handleCancel }) => (
     <View style={styles.profileBox}>
 
-      <View style={styles.imageContainerprofile}>
-        <TouchableOpacity onPress={() => openMediaViewer([{ type: 'image', url: imageUrl }])}>
-          <FastImage
-            source={{ uri: imageUrl }}
-            style={styles.imagerprofile}
-            resizeMode={imageUrl ? 'contain' : 'cover'}
-            onError={() => setImageUrl(null)}
-          />
-        </TouchableOpacity>
+<View style={styles.imageContainerprofile}>
+  {typeof imageUrl === 'string' ? (
+    <TouchableOpacity onPress={() => openMediaViewer([{ type: 'image', url: imageUrl }])}>
+      <FastImage
+        source={{ uri: imageUrl }}
+        style={styles.imagerprofile}
+        resizeMode="contain"
+        onError={() => setImageUrl(null)}
+      />
+    </TouchableOpacity>
+  ) : (
+    <View
+      style={[
+        styles.imagerprofile,
+        { backgroundColor: imageUrl?.backgroundColor || '#ccc' },
+      ]}
+    >
+      <Text style={{ color: imageUrl?.textColor || '#000', fontSize: 50, fontWeight: 'bold' }}>
+        {imageUrl?.initials || '?'}
+      </Text>
+    </View>
+  )}
+</View>
 
-      </View>
 
       <Text style={[styles.title1, { textAlign: 'center', marginBottom: 20 }]}>
         {profile?.first_name} {profile?.last_name}
@@ -681,7 +706,9 @@ const styles = StyleSheet.create({
   imagerprofile: {
     width: '100%',
     height: '100%',
-    borderRadius: 100
+    borderRadius: 100,
+    alignItems:'center',
+    justifyContent:'center'
   },
 
   image: {

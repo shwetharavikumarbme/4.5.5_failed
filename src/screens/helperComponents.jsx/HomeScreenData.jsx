@@ -11,6 +11,7 @@ import { EventRegister } from 'react-native-event-listeners';
 import maleImage from '../../images/homepage/dummy.png';
 import femaleImage from '../../images/homepage/female.jpg';
 import companyImage from '../../images/homepage/buliding.jpg';
+import { generateAvatarFromName } from './useInitialsAvatar';
 
 
 const defaultImageUriCompany = Image.resolveAssetSource(companyImage).uri;
@@ -87,29 +88,56 @@ const useFetchData = ({ shouldFetch = false }) => {
       if (response.data.status === "success") {
         const jobsData = response.data.response || [];
 
-        const urlPromises = jobsData.map(job =>
-          getSignedUrl(job.post_id, job.fileKey)
-        );
+        // Process jobs with image URLs and avatars
+        const processedJobs = await Promise.all(jobsData.map(async (job) => {
+          // If no fileKey exists, just generate avatar
+          if (!job.fileKey) {
+            return {
+              ...job,
+              companyAvatar: generateAvatarFromName(job.company_name)
+            };
+          }
 
-        const signedUrlsArray = await Promise.all(urlPromises);
-        const rawSignedUrlMap = Object.assign({}, ...signedUrlsArray);
+          // Try to get signed URL
+          try {
+            const signedUrl = await getSignedUrl(job.post_id, job.fileKey);
+            if (signedUrl && signedUrl[job.post_id]) {
+              return {
+                ...job,
+                imageUrl: signedUrl[job.post_id]
+              };
+            }
+          } catch (error) {
+            console.warn(`Failed to get signed URL for job ${job.post_id}:`, error);
+          }
 
-        const signedUrlMap = Object.entries(rawSignedUrlMap).reduce((acc, [id, url]) => {
-          acc[id] = url || Company;
-          return acc;
-        }, {});
+          // If signed URL fetch failed, generate avatar
+          return {
+            ...job,
+            companyAvatar: generateAvatarFromName(job.company_name)
+          };
+        }));
 
-        setJobs(jobsData);
+        // Separate image URLs and jobs with avatars
+        const signedUrlMap = {};
+        const jobsWithAvatars = processedJobs.map(job => {
+          if (job.imageUrl) {
+            signedUrlMap[job.post_id] = job.imageUrl;
+            const { imageUrl, ...rest } = job;
+            return rest;
+          }
+          return job;
+        });
+
+        setJobs(jobsWithAvatars);
         setJobImageUrls(signedUrlMap);
-
-
       }
     } catch (error) {
       console.error('Error fetching jobs:', error);
     } finally {
       setIsFetchingJobs(false);
     }
-  };
+};
 
   const fetchTrendingPosts = async () => {
     if (!isConnected) return;
@@ -176,8 +204,8 @@ const useFetchData = ({ shouldFetch = false }) => {
     setIsFetchingLatestPosts(true);
   
     try {
-      const response = await apiClient.post('/getAllAdminForumPosts', {
-        command: "getAllAdminForumPosts",
+      const response = await apiClient.post('/getLatestPosts', {
+        command: "getLatestPosts",
         Type:'Latest',
         limit: 10,
       });

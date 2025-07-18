@@ -124,134 +124,139 @@ export const APPSTRING = {
 /***********************************categoryTypes**************************************************/
 
 export const ProfileSelect = {
-  "Biomedical Engineering Company Manufacturer": [
-    "Diagnostic Equipment",
-    "Wearable Health Tech",
-    "Prosthetics and Implants",
-    "Medical Devices",
-    "Biotechnology Products",
-    "Pharmaceuticals",
-    "Laboratory Equipment",
-    "Imaging Technology"
-  ],
-  "Dealer/Distributor": [
-    "Medical Devices",
-    "Laboratory Supplies",
-    "Pharmaceuticals",
-    "Healthcare IT Solutions",
-    "Surgical Instruments",
-    "Medical Imaging Devices",
-    "Diagnostic Equipment",
-    "Implantable Devices",
-    "Wearable Health Monitors"
-  ],
-  "Biomedical Engineering Company - Service Provider": [
-    "Equipment Maintainance",
-    "Calibration Services",
-    "Medical Imaging Services",
-    "Biomedical Waste Management",
-    "Installation Services",
-    "Clinical Engineering Support",
-    "Training and Education Services",
-    "Telemedicine Services"
-  ],
-  "Healthcare Provider - Biomedical": [
-    "Hospital Biomedical Department",
-    "Clinical Lab",
-    "Diagnostic Center",
-    "Rehabilitation Center",
-    "Home Healthcare"
-  ],
-  " Academic Institution - Biomedical": [
-    "Biomedical Engineering Programs",
-    "Research Institutions",
-    "Training Centers",
-    "Internship and Training Provider",
-    "Healthcare Education",
-    "Continuing Medical Education"
-  ],
-  "Regulatory Body": [
-    "Medical Device Regulations",
-    "Biomedical Ethics and Compliance",
-    "Biotechnology Regulations",
-    "Pharmaceutical Regulations",
-    "Clinical Trial Oversight",
-    "Quality Assurance"
-  ],
-  "Investor/Venture Capitalist": [
-    "Medical Devices",
-    "Biotechnology",
-    "Pharmaceuticals",
-    "Healthcare Startups",
-    "Research and Development Funding"
-  ],
-  "Patient Advocate": [
-    "Patient Education",
-    "Patient Rights",
-    "Healthcare Access",
-    "Chronic Disease Advocacy",
-    "Disability Support"
-  ],
-  "Healthcare IT Developer": [
-    "Electronic Health Records (EHR)",
-    "Telemedicine Solutions",
-    "Healthcare Apps",
-    "AI in Healthcare",
-    "Data Analytics in Healthcare"
-  ],
+  // Company Profiles
+  companyProfiles: {
+    "Biomedical Engineering Company Manufacturer": [
+      "Diagnostic Equipment",
+      "Wearable Health Tech",
+      "Prosthetics and Implants",
+      "Medical Devices",
+      "Biotechnology Products",
+      "Pharmaceuticals",
+      "Laboratory Equipment",
+      "Imaging Technology"
+    ],
+    "Dealer/Distributor": [
+      "Medical Devices",
+      "Laboratory Supplies",
+      "Pharmaceuticals",
+      "Healthcare IT Solutions",
+      "Surgical Instruments",
+      "Medical Imaging Devices",
+      "Diagnostic Equipment",
+      "Implantable Devices",
+      "Wearable Health Monitors"
+    ],
+    "Biomedical Engineering Company - Service Provider": [
+      "Equipment Maintainance",
+      "Calibration Services",
+      "Medical Imaging Services",
+      "Biomedical Waste Management",
+      "Installation Services",
+      "Clinical Engineering Support",
+      "Training and Education Services",
+      "Telemedicine Services"
+    ],
+    "Healthcare Provider - Biomedical": [
+      "Hospital Biomedical Department",
+      "Clinical Lab",
+      "Diagnostic Center",
+      "Rehabilitation Center",
+      "Home Healthcare"
+    ],
+    "Academic Institution - Biomedical": [
+      "Biomedical Engineering Programs",
+      "Research Institutions",
+      "Training Centers",
+      "Internship and Training Provider",
+      "Healthcare Education",
+      "Continuing Medical Education"
+    ],
+    "Regulatory Body": [
+      "Medical Device Regulations",
+      "Biomedical Ethics and Compliance",
+      "Biotechnology Regulations",
+      "Pharmaceutical Regulations",
+      "Clinical Trial Oversight",
+      "Quality Assurance"
+    ],
+    "Investor/Venture Capitalist": [
+      "Medical Devices",
+      "Biotechnology",
+      "Pharmaceuticals",
+      "Healthcare Startups",
+      "Research and Development Funding"
+    ],
+    "Patient Advocate": [
+      "Patient Education",
+      "Patient Rights",
+      "Healthcare Access",
+      "Chronic Disease Advocacy",
+      "Disability Support"
+    ],
+    "Healthcare IT Developer": [
+      "Electronic Health Records (EHR)",
+      "Telemedicine Solutions",
+      "Healthcare Apps",
+      "AI in Healthcare",
+      "Data Analytics in Healthcare"
+    ]
+  },
 
-  //normal user
-  "Biomedical Engineering Student": [
-    "Undergraduate Student",
-    "Graduate Student",
-    "PhD Candidate",
-    "Research Intern",
-    "Project Collaborator",
-  ],
-  "Biomedical Engineering Professor/Academic": [
-    "Lecturer",
-    "Thesis Advisor",
-    "Department Head",
-    "Laboratory Director",
-  ],
-  "Biomedical Engineer": [
-    "Research & Development Engineer",
-    "Clinical Engineer",
-    "Product Design Engineer",
-    "Quality Assurance Engineer",
-    "Regulatory Affairs Specialist",
-    "Biomedical Engineer Sales/Service",
-  ],
-  " Biomedical Researcher/Scientist": [
-    "Academic Researcher",
-    "Industry Researcher",
-    "Clinical Trials",
-    "Innovation and Prototyping",
-    "Medical Device Innovation",
-    "Biomedical Research",
-    "Clinical Research",
-    "Biotechnology Research",
-    "Pharmaceutical Research"
-  ],
-  "Consultant": [
-    "Business Development Consulting",
-    "Healthcare IT Consulting",
-    "Regulatory Consulting",
-    "Product Development Consulting",
-    "Market Research Consulting",
-    "Clinical Engineering Consulting",
-    "Quality Assurance Consulting",
-    "Medical Device Consulting"
-  ],
-  "Medical Professional ": [
-    "Decision Maker",
-    "Doctor - Anaesthetist",
-    "Doctor - Cardiologist "
-  ],
-  "Others": [
-    "Others"
-  ]
-}
+  // Normal (Individual) Profiles
+  normalProfiles: {
+    "Biomedical Engineering Student": [
+      "Undergraduate Student",
+      "Graduate Student",
+      "PhD Candidate",
+      "Research Intern",
+      "Project Collaborator",
+    ],
+    "Biomedical Engineering Professor/Academic": [
+      "Lecturer",
+      "Thesis Advisor",
+      "Department Head",
+      "Laboratory Director",
+    ],
+    "Biomedical Engineer": [
+      "Research & Development Engineer",
+      "Clinical Engineer",
+      "Product Design Engineer",
+      "Quality Assurance Engineer",
+      "Regulatory Affairs Specialist",
+      "Biomedical Engineer Sales/Service",
+    ],
+    "Biomedical Researcher/Scientist": [
+      "Academic Researcher",
+      "Industry Researcher",
+      "Clinical Trials",
+      "Innovation and Prototyping",
+      "Medical Device Innovation",
+      "Biomedical Research",
+      "Clinical Research",
+      "Biotechnology Research",
+      "Pharmaceutical Research"
+    ],
+    "Consultant": [
+      "Business Development Consulting",
+      "Healthcare IT Consulting",
+      "Regulatory Consulting",
+      "Product Development Consulting",
+      "Market Research Consulting",
+      "Clinical Engineering Consulting",
+      "Quality Assurance Consulting",
+      "Medical Device Consulting"
+    ],
+    "Medical Professional": [
+      "Decision Maker",
+      "Doctor - Anaesthetist",
+      "Doctor - Cardiologist"
+    ],
+    "Others": [
+      "Others"
+    ]
+  }
+};
 
 
 export const categoryTypes = [

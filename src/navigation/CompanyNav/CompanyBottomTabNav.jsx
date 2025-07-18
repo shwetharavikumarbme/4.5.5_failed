@@ -136,15 +136,6 @@ const UserDrawerNav = () => {
               drawerIcon: ({ color, size }) => <Icon name="home" size={size} color={color} style={{ fontWeight: 'normal' }} />,
             }}
           />
-          {/* <Drawer.Screen
-            name="Trending"
-            component={TrendingDrawer}
-            options={{
-              drawerIcon: ({ color, size }) => <Icon name="flash" size={size} color={color} style={{ fontWeight: 'normal' }} />,
-              unmountOnBlur: true,
-
-            }}
-          /> */}
           <Drawer.Screen
             name="Companies"
             component={CompanyListNav}

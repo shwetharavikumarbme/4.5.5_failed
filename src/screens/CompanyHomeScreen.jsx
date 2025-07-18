@@ -1,7 +1,7 @@
 
 
 import React, { useRef, useState, useEffect, } from 'react';
-import { SafeAreaView, View, FlatList, Image,  TouchableOpacity, Text, RefreshControl, Keyboard, } from 'react-native';
+import { SafeAreaView, View, FlatList, Image, TouchableOpacity, Text, RefreshControl, Keyboard, } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useNavigationState } from '@react-navigation/native';
 import Video from 'react-native-video';
@@ -17,8 +17,9 @@ import useFetchData from './helperComponents.jsx/HomeScreenData';
 import { useNetwork } from './AppUtils/IdProvider';
 import { useConnection } from './AppUtils/ConnectionProvider';
 import { getSignedUrl, getTimeDisplayForum, getTimeDisplayHome } from './helperComponents.jsx/signedUrls';
-import { styles } from '../assets/AppStyles';
+import AppStyles, { styles } from '../assets/AppStyles';
 import { ForumPostBody } from './Forum/forumBody';
+import FastImage from 'react-native-fast-image';
 
 const CompanySettingScreen = React.lazy(() => import('./Profile/CompanySettingScreen'));
 const ProductsList = React.lazy(() => import('./Products/ProductsList'));
@@ -49,7 +50,6 @@ const CompanyHomeScreen = React.memo(() => {
     return route.name;
   });
   const profile = useSelector(state => state.CompanyProfile.profile);
-
   const dispatch = useDispatch();
   const navigation = useNavigation();
   const [isRefreshing, setIsRefreshing] = React.useState(false);
@@ -105,7 +105,7 @@ const CompanyHomeScreen = React.memo(() => {
   const renderJobCard = ({ item }) => {
     if (!item || item.isEmpty) return null;
 
-    const { post_id, job_title, experience_required, Package, job_post_created_on } = item;
+    const { post_id, job_title, experience_required, Package, job_post_created_on, companyAvatar } = item;
     const imageUrl = jobImageUrls?.[item.post_id];
 
     return (
@@ -115,10 +115,21 @@ const CompanyHomeScreen = React.memo(() => {
         style={styles.eduCard}
       >
         <View style={styles.eduCardLeft}>
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.eduImage}
-          />
+          {imageUrl ? (
+            <FastImage
+              source={{ uri: imageUrl, priority: FastImage.priority.normal }}
+              cache="immutable"
+              style={styles.eduImage}
+              resizeMode='contain'
+              onError={() => { }}
+            />
+          ) : (
+            <View style={[AppStyles.avatarContainer, { backgroundColor: companyAvatar?.backgroundColor }]}>
+              <Text style={[AppStyles.avatarText, { color: companyAvatar?.textColor }]}>
+                {companyAvatar?.initials}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.eduCardRight}>
@@ -174,16 +185,21 @@ const CompanyHomeScreen = React.memo(() => {
               />
 
               <View style={styles.authorInfo}>
-                <Text style={styles.authorName}>{item.author || 'No Name'}</Text>
+                <Text
+                  style={styles.authorName}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {item.author || 'No Name'}
+                </Text>
 
                 <Text style={styles.badgeText}>{item.author_category || ''}</Text>
 
               </View>
             </View>
             <View >
-            <Text style={styles.PostedLabel}>Posted on: <Text style={styles.articleTime}>{getTimeDisplayForum(item.posted_on)}</Text></Text>
+              <Text style={styles.PostedLabel}>Posted on: <Text style={styles.articleTime}>{getTimeDisplayForum(item.posted_on)}</Text></Text>
 
-          
             </View>
 
           </View>
@@ -265,7 +281,7 @@ const CompanyHomeScreen = React.memo(() => {
           {(item.price ?? '').toString().trim() !== '' ? (
             <View style={styles.priceRow}>
               <Text numberOfLines={1} style={styles.price}><Icon name="currency-inr" size={16} color='#666' />
-              {item.price}</Text>
+                {item.price}</Text>
             </View>
           ) : (
             <Text style={styles.eduSubText}>₹ Not specified</Text>
@@ -307,7 +323,7 @@ const CompanyHomeScreen = React.memo(() => {
             <Icon name="text-box-outline" size={16} color='#666' /> {item.description || ' '}
           </Text>
 
-          <Text numberOfLines={1}  style={styles.companyNameText}>
+          <Text numberOfLines={1} style={styles.companyNameText}>
             {/* <Text style={styles.label}>Company name: </Text> */}
             <Icon name="office-building-outline" size={16} color='#666' /> {item.company_name || ' '}
           </Text>
@@ -315,7 +331,7 @@ const CompanyHomeScreen = React.memo(() => {
           {(item.price ?? '').toString().trim() !== '' ? (
             <View style={styles.priceRow}>
               <Text numberOfLines={1} style={styles.price}><Icon name="currency-inr" size={16} color='#666' />
-              {item.price} </Text>
+                {item.price} </Text>
             </View>
           ) : (
             <Text style={styles.eduSubText}>₹ Not specified</Text>
@@ -407,7 +423,6 @@ const CompanyHomeScreen = React.memo(() => {
           profileData.imageUrl = null;
         }
 
-        // 📄 Handle brochure
         if (profileData.brochureKey?.trim()) {
           try {
             const brochureRes = await getSignedUrl('brochureFile', profileData.brochureKey);
@@ -453,6 +468,15 @@ const CompanyHomeScreen = React.memo(() => {
     }
   };
 
+  const [visibleItem, setVisibleItem] = useState(null);
+  const viewabilityConfig = { itemVisiblePercentThreshold: 50 };
+
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    const firstVisible = viewableItems?.[0];
+    if (firstVisible?.item?.type) {
+      setVisibleItem(firstVisible.item.type);
+    }
+  }).current;
 
 
 
@@ -481,16 +505,21 @@ const CompanyHomeScreen = React.memo(() => {
 
           <TouchableOpacity onPress={handleProfile} style={styles.profileContainer} activeOpacity={0.8}>
             <View style={styles.detailImageWrapper}>
-              <Image
-                source={{ uri: profile?.imageUrl }}
-                style={styles.detailImage}
-                resizeMode="cover"
-                onError={() => {
-                  console.log('Image load error — switching to fallback.');
-
-                }}
-              />
-
+              {profile?.imageUrl ? (
+                <FastImage
+                  source={{ uri: profile?.imageUrl, priority: FastImage.priority.normal }}
+                  cache="immutable"
+                  style={styles.detailImage}
+                  resizeMode='contain'
+                  onError={() => { }}
+                />
+              ) : (
+                <View style={[styles.avatarContainer, { backgroundColor: profile?.companyAvatar?.backgroundColor }]}>
+                  <Text style={[styles.avatarText, { color: profile?.companyAvatar?.textColor }]}>
+                    {profile?.companyAvatar?.initials}
+                  </Text>
+                </View>
+              )}
             </View>
           </TouchableOpacity>
 
@@ -517,12 +546,14 @@ const CompanyHomeScreen = React.memo(() => {
           { type: 'services', data: services },
         ]}
 
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
 
         renderItem={({ item }) => {
           switch (item.type) {
 
             case 'banner1':
-              return <Banner01 />;
+              return <Banner01 isVisible={visibleItem === 'banner1'} />;
 
 
             case 'jobs':

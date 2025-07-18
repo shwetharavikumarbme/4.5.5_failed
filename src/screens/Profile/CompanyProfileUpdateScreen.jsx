@@ -8,13 +8,13 @@ import {
   StyleSheet,
   FlatList,
   SafeAreaView,
-  Modal, Image, 
+  Modal, Image,
   ActivityIndicator,
   ActionSheetIOS
 } from 'react-native';
 import MaterialIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Icon from 'react-native-vector-icons/MaterialIcons'
-import { CountryCodes } from '../../assets/Constants';
+import { CountryCodes, ProfileSelect } from '../../assets/Constants';
 import { Keyboard } from 'react-native';
 import axios from 'axios';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -37,6 +37,8 @@ import default_image from '../../images/homepage/buliding.jpg';
 import { showToast } from '../AppUtils/CustomToast';
 import AppStyles from '../../assets/AppStyles';
 import apiClient from '../ApiClient';
+import FastImage from 'react-native-fast-image';
+import CustomDropdown from '../../components/CustomDropDown';
 
 
 const CompanyUserSignupScreen = () => {
@@ -80,6 +82,37 @@ const CompanyUserSignupScreen = () => {
   const [loading, setLoading] = useState(false);
   const [isImageChanged, setIsImageChanged] = useState(false);
   const resolvedDefaultImage = Image.resolveAssetSource(default_image).uri;
+  const [selectedProfile, setSelectedProfile] = useState(profile?.select_your_profile || "");
+  const [selectedCategory, setSelectedCategory] = useState(profile?.category || "");
+
+  const [availableCategories, setAvailableCategories] = useState([]);
+
+  useEffect(() => {
+    if (selectedProfile) {
+      const categories = [
+        ...(ProfileSelect.normalProfiles[selectedProfile] || []),
+        ...(ProfileSelect.companyProfiles[selectedProfile] || [])
+      ];
+
+      // Reset category if it's not in the new profile's categories
+      if (selectedCategory && !categories.includes(selectedCategory)) {
+        setSelectedCategory("");
+      }
+    }
+  }, [selectedProfile]);
+
+
+  const handleProfileSelect = (item) => {
+    console.log('Selected Profile:', item);
+    setSelectedProfile(item.label); // store only the label string
+    setHasChanges(true);
+  };
+
+  const handleCategorySelect = (item) => {
+    console.log('Selected Category:', item);
+    setSelectedCategory(item.label); // store only the label string
+    setHasChanges(true);
+  };
 
   const inputRefs = useRef([]);
   // Generic focus function for any field
@@ -356,7 +389,9 @@ const CompanyUserSignupScreen = () => {
       company_address: profile.company_address || "",
       company_description: profile.company_description || "",
       fileKey: profile.fileKey || null,
-      brochureKey: profile.brochureKey || ""
+      brochureKey: profile.brochureKey || "",
+      select_your_profile: profile.select_your_profile,
+      category: profile.category,
     };
 
     const hasAnyChanges =
@@ -605,18 +640,18 @@ const CompanyUserSignupScreen = () => {
     const fileKey = postData.fileKey?.trim();
     const imageUrl = route.params?.imageUrl?.trim();
     const hasImage = fileKey && imageUrl?.includes(fileKey);
-  
+
     const options = ['Take Photo', 'Choose from Gallery'];
     const actions = [openCamera, openGallery];
-  
+
     if (hasImage) {
       options.push('Remove Image');
       actions.push(handleRemoveImage);
     }
-  
+
     options.push('Cancel');
     const cancelButtonIndex = options.length - 1;
-  
+
     ActionSheetIOS.showActionSheetWithOptions(
       {
         options,
@@ -630,7 +665,7 @@ const CompanyUserSignupScreen = () => {
       }
     );
   };
-  
+
   const openCamera = () => {
     ImagePicker.openCamera({
       mediaType: 'photo',
@@ -643,14 +678,14 @@ const CompanyUserSignupScreen = () => {
       .then((image) => {
         const initialImageSize = image.size / 1024 / 1024;
         const uri = image.path;
-  
+
         setFileType(image.mime);
         setIsImageChanged(true);
-  
+
         ImageResizer.createResizedImage(uri, 800, 600, 'JPEG', 80)
           .then((resizedImage) => {
             const resizedImageSize = resizedImage.size / 1024 / 1024;
-  
+
             if (resizedImage.size > image.size) {
               setImageUri(uri);
               setFileUri(uri);
@@ -674,7 +709,7 @@ const CompanyUserSignupScreen = () => {
         }
       });
   };
-  
+
 
 
 
@@ -1052,6 +1087,9 @@ const CompanyUserSignupScreen = () => {
         company_description: postData.company_description?.trimStart().trimEnd(),
         fileKey: imageFileKey || null,
         brochureKey: documentFileKey,
+        select_your_profile: selectedProfile,
+        category: selectedCategory,
+
         // dark_mode: { android: false, ios: false, web: false }, 
       };
 
@@ -1197,12 +1235,34 @@ const CompanyUserSignupScreen = () => {
           switch (item.key) {
             case 'image':
               return (
-                <TouchableOpacity activeOpacity={1} onPress={handleImageSelection} style={styles.imageContainer}>
+                // <TouchableOpacity activeOpacity={1} onPress={handleImageSelection} style={styles.imageContainer}>
+
+                //   {imageUri || postData.fileKey ? (
+                //     <Image source={{ uri: imageUri || imageUrl }} style={styles.image} />
+                //   ) : (
+                //     <Image source={require('../../images/homepage/buliding.jpg')} style={styles.image} />
+                //   )}
+                //   <TouchableOpacity style={styles.cameraIconContainer} onPress={handleImageSelection}>
+                //     <Icon name="camera-enhance" size={22} color="#333" />
+                //   </TouchableOpacity>
+                // </TouchableOpacity>
+
+                <TouchableOpacity onPress={handleImageSelection} style={styles.imageContainer}>
 
                   {imageUri || postData.fileKey ? (
-                    <Image source={{ uri: imageUri || imageUrl }} style={styles.image} />
+                    <FastImage
+                      source={{ uri: imageUri || imageUrl, priority: FastImage.priority.normal }}
+                      cache="immutable"
+                      style={styles.image}
+                      resizeMode='contain'
+                      onError={() => { }}
+                    />
                   ) : (
-                    <Image source={require('../../images/homepage/buliding.jpg')} style={styles.image} />
+                    <View style={[styles.avatarContainer, { backgroundColor: profile?.companyAvatar?.backgroundColor }]}>
+                      <Text style={[styles.avatarText, { color: profile?.companyAvatar?.textColor }]}>
+                        {profile?.companyAvatar?.initials}
+                      </Text>
+                    </View>
                   )}
                   <TouchableOpacity style={styles.cameraIconContainer} onPress={handleImageSelection}>
                     <Icon name="camera-enhance" size={22} color="#333" />
@@ -1285,12 +1345,50 @@ const CompanyUserSignupScreen = () => {
                       )}
 
                       {profile.is_email_verified && postData.company_email_id === verifiedEmail && (
-                      <MaterialIcon name="check-circle" size={14} color="green" style={styles.verifiedIcon} />
+                        <MaterialIcon name="check-circle" size={14} color="green" style={styles.verifiedIcon} />
                       )}
                     </View>
                   </View>
 
+                  <Text style={styles.label}>Profile type</Text>
 
+                  <View style={styles.inputContainer}>
+
+                    <CustomDropdown
+                      label="Profile Type"
+                      data={Object.keys({
+                        ...ProfileSelect.normalProfiles,
+                        ...ProfileSelect.companyProfiles
+                      })}
+                      onSelect={(item) => {
+                        setSelectedProfile(item);
+                        setSelectedCategory(""); // Reset category when profile changes
+                      }}
+                      selectedItem={selectedProfile}
+                      setSelectedItem={setSelectedProfile}
+                    />
+                  </View>
+
+
+                  {selectedProfile && (
+                    <>
+                      <Text style={styles.label}>Category <Text style={{ color: 'red' }}>*</Text></Text>
+
+                      <View style={styles.inputContainer}>
+                        <CustomDropdown
+                          label="Category"
+                          data={[
+                            ...(ProfileSelect.normalProfiles[selectedProfile] || []),
+                            ...(ProfileSelect.companyProfiles[selectedProfile] || [])
+                          ]}
+                          onSelect={setSelectedCategory}
+                          selectedItem={selectedCategory}
+                          setSelectedItem={setSelectedCategory}
+                        />
+
+                      </View>
+                    </>
+                  )}
                   <Text style={[styles.label, { color: "black", fontWeight: 500, fontSize: 15, paddingBottom: 10 }]}>Business phone no. <Text style={{ color: 'red' }}>*</Text></Text>
 
                   <View style={styles.inputContainer}>
@@ -1605,6 +1703,17 @@ const styles = StyleSheet.create({
     width: 140,
     marginVertical: 10,
 
+  },
+  avatarContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 100,
+  },
+  avatarText: {
+    fontSize: 50,
+    fontWeight: 'bold',
   },
 
   inputTitle: {

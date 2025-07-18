@@ -13,6 +13,7 @@ import { useBottomSheet } from './SheetProvider';
 import { showToast } from './CustomToast';
 import { useConnection } from './ConnectionProvider';
 import { getTimeDisplay } from '../helperComponents.jsx/signedUrls';
+import { generateAvatarFromName } from '../helperComponents.jsx/useInitialsAvatar';
 
 const defaultImageUriCompany = Image.resolveAssetSource(companyImage).uri;
 const defaultImageUriFemale = Image.resolveAssetSource(femaleImage).uri;
@@ -20,6 +21,7 @@ const defaultImageUriMale = Image.resolveAssetSource(maleImage).uri;
 
 const CommentsSection = forwardRef(({ forum_id, currentUserId, onEditComment, highlightCommentId }, ref) => {
     const profile = useSelector(state => state.CompanyProfile.profile);
+    console.log('profile',profile)
     const navigation = useNavigation();
     const [comments, setComments] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -144,17 +146,12 @@ const CommentsSection = forwardRef(({ forum_id, currentUserId, onEditComment, hi
 
     const getSignedUrlForComment = async (comment) => {
         if (!comment.fileKey) {
-            let defaultImageUri = defaultImageUriMale;
-
-            if (comment.user_type === 'company') {
-                defaultImageUri = defaultImageUriCompany;
-            } else if (comment.user_gender === 'Female') {
-                defaultImageUri = defaultImageUriFemale;
-            }
+            const name = comment.author || 'Unknown';
+            const avatarProps = generateAvatarFromName(name);
 
             return {
                 ...comment,
-                signedUrl: defaultImageUri,
+                avatarProps, // fallback to initials-based avatar
             };
         }
 
@@ -177,13 +174,12 @@ const CommentsSection = forwardRef(({ forum_id, currentUserId, onEditComment, hi
                     signedUrl: res.data.response.signedUrl,
                 };
             }
-
         } catch (e) {
-            // Optional: add logging if needed
+            console.warn('Error fetching signed URL for comment:', e);
         }
-
         return comment;
     };
+
 
     useEffect(() => {
         setLoading(true);
@@ -279,19 +275,19 @@ const CommentsSection = forwardRef(({ forum_id, currentUserId, onEditComment, hi
                 user_id: currentUserId,
                 comment_id: commentId,
             });
-    
+
             if (response.data.status === 'success') {
                 showToast("Comment deleted", 'success');
-    
+
                 setComments(prevComments => prevComments.filter(comment => comment.comment_id !== commentId));
-                EventRegister.emit('onCommentDeleted', { 
+                EventRegister.emit('onCommentDeleted', {
                     forum_id: forum_id,
                     comment_id: commentId  // Add this to notify which comment was deleted
                 });
-    
+
                 // If we're deleting the comment that's currently being edited
                 EventRegister.emit('onEditCommentCancelled');
-                
+
                 setDropdownVisible({});
             } else {
                 alert('Failed to delete comment. Please try again.');
@@ -419,14 +415,32 @@ const CommentsSection = forwardRef(({ forum_id, currentUserId, onEditComment, hi
 
                         <TouchableOpacity onPress={() => handleNavigate(item)}>
                             <View style={styles.imageContainer}>
-                                <FastImage
-                                    source={{ uri: imageUrl }}
-                                    style={styles.profileIcon}
-                                    resizeMode="cover"
-                                    onError={() => { }}
-                                />
+                                {item.signedUrl ? (
+                                    <FastImage
+                                        source={{ uri: item.signedUrl }}
+                                        style={styles.profileIcon}
+                                        resizeMode="cover"
+                                        onError={() => {
+                                            // Optional: you can fallback to initials if loading fails
+                                        }}
+                                    />
+                                ) : item.avatarProps ? (
+                                    <View
+                                        style={[
+                                            styles.profileIcon,
+                                            { backgroundColor: item.avatarProps.backgroundColor, justifyContent: 'center', alignItems: 'center' },
+                                        ]}
+                                    >
+                                        <Text style={{ color: item.avatarProps.textColor, fontWeight: 'bold' }}>
+                                            {item.avatarProps.initials}
+                                        </Text>
+                                    </View>
+                                ) : (
+                                    <View style={[styles.profileIcon, { backgroundColor: '#ccc' }]} />
+                                )}
                             </View>
                         </TouchableOpacity>
+
 
                         <View style={styles.commentContent}>
                             <View style={styles.authorRow}>

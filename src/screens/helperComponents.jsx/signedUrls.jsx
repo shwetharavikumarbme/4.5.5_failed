@@ -14,7 +14,6 @@ const defaultImageUriMale = Image.resolveAssetSource(maleImage).uri;
 
 
 export const getSignedUrl = async (id, key) => {
-
   if (!key) {
     return { [id]: '' };
   }
@@ -68,26 +67,17 @@ export const useLazySignedUrls = (
     const id = getNestedProperty(item, idField);
     const key = getNestedProperty(item, fileKeyField);
 
-    if (!id || signedUrlCache.current[id]) return;
-
-    const fallback = defaultImageUriCompany;
-
-    if (!key) {
-      signedUrlCache.current[id] = fallback;
-      triggerRerender();
-      return;
-    }
+    if (!id || signedUrlCache.current[id] || !key) return;
 
     try {
       const res = await getSignedUrl(id, key);
-      const url = res[id] || fallback;
-      signedUrlCache.current[id] = url;
-
-      if (url && url !== fallback) {
+      const url = res[id];
+      if (url) {
+        signedUrlCache.current[id] = url;
         FastImage.preload([{ uri: url }]);
       }
     } catch {
-      signedUrlCache.current[id] = fallback;
+      // Do nothing if there's an error
     }
 
     triggerRerender();
@@ -149,7 +139,7 @@ export const useLazySignedUrls = (
     onViewableItemsChanged,
     viewabilityConfig,
     version,
-    preloadUrls, // 🔥 manual preload method (use in scroll handler)
+    preloadUrls,
   };
 };
 

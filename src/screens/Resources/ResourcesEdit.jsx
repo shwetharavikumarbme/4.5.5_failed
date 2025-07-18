@@ -651,6 +651,19 @@ const ResourcesEditScreen = () => {
     return blob;
   }
 
+  const sanitizeHtmlBody = (html) => {
+    const cleaned = cleanForumHtml(html); // your existing cleaner
+  
+    return cleaned
+      .replace(/<div><br><\/div>/gi, '') // remove empty div lines
+      .replace(/<p>(&nbsp;|\s)*<\/p>/gi, '') // remove empty <p>
+      .replace(/<div>(&nbsp;|\s)*<\/div>/gi, '') // remove empty <div>
+      .replace(/(<br\s*\/?>\s*){2,}/gi, '<br>') // collapse multiple <br> into one
+      .replace(/^(<br\s*\/?>)+/gi, '') // remove leading <br>
+      .replace(/(<br\s*\/?>)+$/gi, '') // remove trailing <br>
+      .trim();
+  };
+  
 
   const dispatch = useDispatch();
 
@@ -660,9 +673,8 @@ const ResourcesEditScreen = () => {
 
     try {
       const trimmedTitle = stripHtmlTags(postData.title)?.trim();
-      const cleanedBody = cleanForumHtml(postData.resource_body?.trim() || '');
-      const trimmedConclusion = postData.conclusion?.trim() || '';
-
+      const cleanedBody = sanitizeHtmlBody(postData.resource_body?.trim() || '');
+console.log('cleanedBody',cleanedBody)
       if (!trimmedTitle) {
         showToast("Title field cannot be empty", 'info');
         setIsLoading(false);
@@ -695,7 +707,6 @@ const ResourcesEditScreen = () => {
         resource_id: post.resource_id,
         title: trimmedTitle,
         resource_body: cleanedBody,
-        conclusion: trimmedConclusion,
         fileKey,
         mediaType: postData.mediaType || '',
         thumbnail_fileKey: thumbnailFileKey,
@@ -710,7 +721,6 @@ const ResourcesEditScreen = () => {
         resource_id: post.resource_id,
         title: trimmedTitle,
         resource_body: cleanedBody,
-        conclusion: trimmedConclusion,
         fileKey,
         mediaType: postData.mediaType || '',
         thumbnail_fileKey: thumbnailFileKey,
@@ -956,15 +966,35 @@ const ResourcesEditScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.profileContainer}>
-          <View style={styles.imageContainer}>
-
-            <FastImage
-              source={{ uri: profile?.imageUrl }}
-              style={styles.detailImage}
-              resizeMode={FastImage.resizeMode.cover}
-              onError={() => { }}
-            />
-          </View>
+     <View style={styles.imageContainer}>
+                      {profile?.fileKey ? (
+                        <Image
+                          source={{ uri: profile?.imageUrl }}
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 20,
+                            marginRight: 10,
+                          }}
+                        />
+                      ) : (
+                        <View
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 20,
+                            marginRight: 10,
+                            backgroundColor: profile?.companyAvatar?.backgroundColor || '#ccc',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Text style={{ color: profile?.companyAvatar?.textColor || '#000', fontWeight: 'bold' }}>
+                            {profile?.companyAvatar?.initials || '?'}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
           <View style={styles.profileTextContainer}>
             <Text style={styles.profileName}>
               {profile?.company_name
@@ -1415,7 +1445,7 @@ resizeMode:'contain'
   },
   profileCategory: {
     fontSize: 14,
-    color: 'black',
+    color: 'gray',
     fontWeight: '400'
   },
   title: {

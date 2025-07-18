@@ -8,7 +8,6 @@ import { getStatusBarHeight } from 'react-native-status-bar-height';
 import { createDrawerNavigator, DrawerContentScrollView } from '@react-navigation/drawer';
 import CustomDrawerContent from '../DrawerContent';
 import HelpCenter from '../../screens/Bme_content/HelpCenter';
-import TrendingNav from '../../screens/Forum/TrendingNav';
 import { NetworkProvider } from '../../screens/AppUtils/IdProvider';
 
 const Drawer = createDrawerNavigator();
@@ -116,15 +115,6 @@ const UserDrawerNav = () => {
 
           }}
         />
-         {/* <Drawer.Screen
-            name="Trending"
-            component={TrendingDrawer}
-            options={{
-              drawerIcon: ({ color, size }) => <Icon name="flash" size={size} color={color} style={{ fontWeight: 'normal' }} />,
-              unmountOnBlur: true,
-
-            }}
-          /> */}
         <Drawer.Screen
           name="Companies"
           component={UserCompanyListNav}

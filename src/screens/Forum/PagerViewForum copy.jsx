@@ -256,13 +256,11 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
     const reactionListener = EventRegister.addEventListener(
       'onForumReactionUpdated',
       ({ forum_id, reaction_type }) => {
-        console.log('[Reaction Event] Received:', { forum_id, reaction_type });
-
+     
         setLocalPosts(prev => {
           return prev.map(post => {
             if (post.forum_id !== forum_id) return post;
 
-            console.log('[Reaction Update] Updating post:', post.forum_id);
 
             let newTotal = Number(post.totalReactions || 0);
             let newReaction = reaction_type;
@@ -277,7 +275,7 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
               newTotal += 1;
             } else if (oldReaction !== reaction_type) {
               // Reaction changed (e.g., Like -> Love), count remains
-              console.log('[Reaction Update] Changed from', oldReaction, 'to', reaction_type);
+            
             }
 
             const updatedPost = {
@@ -286,8 +284,7 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
               totalReactions: newTotal,
             };
 
-            console.log('[Reaction Update] Updated post:', updatedPost);
-
+       
             return updatedPost;
           });
         });
@@ -303,9 +300,6 @@ const AllPosts = ({ scrollRef, videoRefs, isTabActive }) => {
   const dispatch = useDispatch();
   const navigation = useNavigation();
   const [localPosts, setLocalPosts] = useState([]);
-useEffect(()=>{
-  console.log('localPosts',localPosts[1])
-})
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeVideo, setActiveVideo] = useState(null);
@@ -366,63 +360,14 @@ useEffect(()=>{
         return;
       }
   
-      const enrichedPosts = newPosts.map(post => {
-        const originalWidth = post?.extraData?.width;
-        const originalHeight = post?.extraData?.height;
-      
-        if (!originalWidth || !originalHeight || originalHeight <= 0) {
-          return {
-            ...post,
-            displayWidth: MAX_WIDTH,
-            displayHeight: MAX_WIDTH,
-            aspectRatio: 1,
-            originalAspectRatio: 1,
-          };
-        }
-      
-        const originalAspectRatio = originalWidth / originalHeight;
-        let displayWidth = originalWidth;
-        let displayHeight = originalHeight;
-      
-        // First scale down to fit height
-        if (displayHeight > MAX_HEIGHT) {
-          displayHeight = MAX_HEIGHT;
-          displayWidth = displayHeight * originalAspectRatio;
-        }
-      
-        // Then check if width is too wide
-        if (displayWidth > MAX_WIDTH) {
-          displayWidth = MAX_WIDTH;
-          displayHeight = displayWidth / originalAspectRatio;
-        }
-      
-        // Now force aspect ratio if it's too narrow (too tall)
-        let finalAspectRatio = displayWidth / displayHeight;
-        if (finalAspectRatio < MIN_ASPECT_RATIO) {
-          finalAspectRatio = MIN_ASPECT_RATIO;
-          displayWidth = MAX_WIDTH;
-          displayHeight = displayWidth / finalAspectRatio;
-        }
-      
-        console.log('[DEBUG] forum_id:', post.forum_id, {
-          originalWidth,
-          originalHeight,
-          originalAspectRatio,
-          displayWidth,
-          displayHeight,
-          finalAspectRatio,
-        });
-      
-        return {
-          ...post,
-          displayWidth,
-          displayHeight,
-          aspectRatio: finalAspectRatio,
-          originalAspectRatio,
-        };
-      });
-      
-      
+      // Use pre-calculated dimensions from extraData
+      const enrichedPosts = newPosts.map(post => ({
+        ...post,
+        displayWidth: post.extraData?.displayWidth || MAX_WIDTH,
+        displayHeight: post.extraData?.displayHeight || MAX_WIDTH,
+        aspectRatio: post.extraData?.aspectRatio || 1,
+        originalAspectRatio: post.extraData?.originalAspectRatio || 1,
+      }));
   
       // Deduplicate and update state
       setLocalPosts(prev => {
@@ -435,15 +380,16 @@ useEffect(()=>{
   
       // Preload initial media (optimization)
       if (!lastKey) {
-        preloadMediaUrls(enrichedPosts.slice(0, 4));
+        preloadUrls(0, enrichedPosts.length - 1); // preload all new items
       }
+      
   
       // Pagination control
       setHasMorePosts(!!response.data.lastEvaluatedKey);
       setLastEvaluatedKey(response.data.lastEvaluatedKey || null);
   
     } catch (error) {
-      console.error('Error fetching posts:', error);
+
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -452,25 +398,15 @@ useEffect(()=>{
 
 
 
-const {
-  getMediaForItem,
-  getAuthorImage,
-  onViewableItemsChanged: mediaViewabilityChanged,
-  viewabilityConfig: mediaViewabilityConfig,
-  preloadUrls: preloadMediaUrls
-} = useForumMedia(localPosts);
-
-
-
-  // Combine with your existing viewability handler
-  const combinedOnViewableItemsChanged = useCallback((info) => {
-    mediaViewabilityChanged(info);
-    onViewableItemsChanged(info); // Now correctly calling the function
-  }, [mediaViewabilityChanged, onViewableItemsChanged]);
-
-
-
-
+  const {
+    getMediaForItem,
+    getAuthorImage,
+    preloadUrls,
+    onViewableItemsChanged,
+    viewabilityConfig,
+    version,
+  } = useForumMedia(localPosts, isTabActive, setActiveVideo);
+  
 
   useEffect(() => {
     const listener = EventRegister.addEventListener('onForumPostCreated', async ({ newPost }) => {
@@ -558,55 +494,6 @@ const {
     if (loading || loadingMore || !hasMorePosts) return;
     fetchLatestPosts(lastEvaluatedKey);
   }, [loading, loadingMore, hasMorePosts, lastEvaluatedKey]);
-
-
-  const viewedForumIdsRef = useRef(new Set());
-
-  const incrementViewCount = async (forumId) => {
-    try {
-      await apiClient.post('/forumViewCounts', {
-        command: 'forumViewCounts',
-        forum_id: forumId,
-      });
-    } catch (error) {
-
-    }
-  };
-
-  const viewabilityConfig = {
-    itemVisiblePercentThreshold: 70,
-    minimumViewTime: 300,
-    waitForInteraction: false
-  };
-
-
-
-// Change this from useRef to useCallback
-const onViewableItemsChanged = useCallback(({ viewableItems }) => {
-  if (!isFocused) {
-    setActiveVideo(null);
-    return;
-  }
-
-  const visibleItem = viewableItems.find(item => item.isViewable);
-
-  if (visibleItem) {
-    const forumId = visibleItem.item.forum_id;
-
-    if (visibleItem.item.videoUrl) {
-      setActiveVideo(forumId);
-    } else {
-      setActiveVideo(null);
-    }
-
-    if (forumId && !viewedForumIdsRef.current.has(forumId)) {
-      viewedForumIdsRef.current.add(forumId);
-      incrementViewCount(forumId);
-    }
-  } else {
-    setActiveVideo(null);
-  }
-}, [isFocused]);
 
 
 
@@ -720,54 +607,37 @@ const onViewableItemsChanged = useCallback(({ viewableItems }) => {
   const renderItem = useCallback(({ item }) => {
     const mediaData = getMediaForItem(item);
     const authorImageUrl = getAuthorImage(item);
-    
-    // Combine with existing item data
-    const combinedItem = {
-      ...item,
-      ...mediaData,
-      authorImageUrl
-    };
-  console.log('mediaData',mediaData)
-  console.log('authorImageUrl',authorImageUrl)
+    const combinedItem = { ...item, ...mediaData, authorImageUrl };
 
-    // console.log('Render', item.forum_id, item.totalReactions, item.userReaction);
     return (
-
       <View style={styles.comments}>
+        {/* Author section */}
         <View style={styles.dpContainer}>
-          <TouchableOpacity style={styles.dpContainer1} onPress={() => handleNavigate(item)}
-            activeOpacity={0.8}>
+          <TouchableOpacity style={styles.dpContainer1} onPress={() => handleNavigate(item)} activeOpacity={0.8}>
             <FastImage
               source={combinedItem.authorImageUrl ? { uri: combinedItem.authorImageUrl } : null}
               style={styles.image1}
-              onError={() => {
-                // Optional error handling
-              }}
             />
-
           </TouchableOpacity>
 
           <View style={styles.textContainer}>
             <View style={styles.title3}>
               <TouchableOpacity onPress={() => handleNavigate(item)}>
                 <Text style={{ flex: 1, alignSelf: 'flex-start', color: 'black', fontSize: 15, fontWeight: '600' }}>
-                  {(item.author || '').trimStart().trimEnd()}
+                  {(item.author || '').trim()}
                 </Text>
               </TouchableOpacity>
             </View>
 
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-              <View>
-                <Text style={styles.title}>{item.author_category || ''}</Text>
-              </View>
-              <View>
-                <Text style={[styles.date1]}>{getTimeDisplayForum(item.posted_on)}</Text>
-              </View>
+              <Text style={styles.title}>{item.author_category || ''}</Text>
+              <Text style={styles.date1}>{getTimeDisplayForum(item.posted_on)}</Text>
             </View>
           </View>
         </View>
-        <View style={{ paddingHorizontal: 10, }}>
 
+        {/* Post content */}
+        <View style={{ paddingHorizontal: 10 }}>
           <ForumBody
             html={normalizeHtml(item?.forum_body, searchQuery)}
             forumId={item.forum_id}
@@ -775,115 +645,79 @@ const onViewableItemsChanged = useCallback(({ viewableItems }) => {
             toggleFullText={toggleFullText}
           />
         </View>
-        {item.fileKey ? (
-          <TouchableOpacity activeOpacity={1} style={{borderRadius:6, overflow:'hidden',marginTop:10}}>
-  {(() => {
-    const ratio = item.aspectRatio;
-    const isValid = typeof ratio === 'number' && isFinite(ratio) && ratio > 0;
-    const height = isValid ? Math.round(deviceWidth / ratio) : 250;
 
-    const hasVideo = !!mediaData?.videoUrl;
-    const hasImage = !!mediaData?.imageUrl;
+        {/* Media content */}
+        {item.fileKey && (
 
-    return (
-      <View style={{ width: '100%', height, }}>
-        {hasVideo ? (
-          <Video
-            source={{ uri: mediaData.videoUrl }}
-            ref={ref => {
-              if (ref) {
-                videoRefs[item.forum_id] = ref;
-              } else {
-                delete videoRefs[item.forum_id];
-              }
-            }}
-            style={{ width: '100%', height: '100%' }}
-            controls
-            paused={!isTabActive || activeVideo !== item.forum_id}
-            resizeMode="cover"
-            poster={mediaData.thumbnailUrl || undefined}
-            posterResizeMode="cover"
-            repeat
-          />
-        ) : hasImage ? (
-          <TouchableOpacity onPress={() => openMediaViewer([{ type: 'image', url: mediaData.imageUrl }])}
-          activeOpacity={1} >
-          <FastImage
-            source={{
-              uri: mediaData.imageUrl,
-              priority: FastImage.priority.high,
-              cache: FastImage.cacheControl.immutable
-            }}
-            style={{ width: '100%', height: '100%', }}
-            resizeMode={FastImage.resizeMode.cover}
-          />
-          </TouchableOpacity>
-        ) : null}
-      </View>
-    );
-  })()}
-</TouchableOpacity>
+            <View style={{ 
+              width: '100%', 
+              height: item.aspectRatio ? Math.round(deviceWidth / item.aspectRatio) : 250 
+            }}>
+              {mediaData?.videoUrl ? (
+                <Video
+                  source={{ uri: mediaData.videoUrl }}
+                  ref={ref => {
+                    if (ref) videoRefs[item.forum_id] = ref;
+                    else delete videoRefs[item.forum_id];
+                  }}
+                  style={{ width: '100%', height: '100%', backgroundColor:'#fff' }}
+                  controls
+                  paused={!isTabActive || activeVideo !== item.forum_id}
+                  resizeMode="cover"
+                  poster={mediaData.thumbnailUrl}
+                  posterResizeMode="cover"
+                  repeat
+                />
+              ) : mediaData?.imageUrl ? (
+                <TouchableOpacity onPress={() => openMediaViewer([{ type: 'image', url: mediaData.imageUrl }])} activeOpacity={1}>
+                  <FastImage
+                    source={{ uri: mediaData.imageUrl }}
+                    style={{ width: '100%', height: '100%' }}
+                    resizeMode={FastImage.resizeMode.cover}
+                  />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+        
+        )}
 
-) : null}
-
-
-
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, height: 40, alignItems: 'center', }}>
+        {/* Reactions and actions */}
+        <View style={{ 
+          flexDirection: 'row', 
+          justifyContent: 'space-between', 
+          paddingHorizontal: 15, 
+          height: 40, 
+          alignItems: 'center' 
+        }}>
+          {/* Reactions section */}
           <View>
             <TouchableOpacity
-              onLongPress={() => {
-
-                setActiveReactionForumId(prev =>
-                  prev === item.forum_id ? null : item.forum_id
-                );
-              }}
+              onLongPress={() => setActiveReactionForumId(prev => prev === item.forum_id ? null : item.forum_id)}
               activeOpacity={0.7}
-              style={{
-
-                flexDirection: 'row',
-                alignItems: 'center',
-              }}
+              style={{ flexDirection: 'row', alignItems: 'center' }}
               onPress={async () => {
-
-                const post = localPosts.find(p => p.forum_id === item.forum_id);
-                const currentReaction = post?.userReaction || 'None';
-
-                // ⛳️ If there's any existing reaction, remove it
-                const selectedType = currentReaction !== 'None' && currentReaction !== null
-                  ? 'None'
-                  : 'Like';
-
-                setLocalPosts(prev =>
-                  prev.map(p => {
-                    if (p.forum_id !== item.forum_id) return p;
-
-                    let newTotal = Number(p.totalReactions || 0);
-                    let newReaction = selectedType;
-
-                    const hadReaction = currentReaction && currentReaction !== 'None';
-
-                    if (selectedType === 'None') {
-                      if (hadReaction) newTotal -= 1;
-                      newReaction = null;
-                    } else if (!hadReaction) {
-                      newTotal += 1;
-                    }
-
-                    return {
-                      ...p,
-                      userReaction: newReaction,
-                      totalReactions: newTotal,
-                    };
-                  })
-                );
-
+                const currentReaction = item.userReaction || 'None';
+                const selectedType = currentReaction !== 'None' ? 'None' : 'Like';
+                
+                setLocalPosts(prev => prev.map(p => {
+                  if (p.forum_id !== item.forum_id) return p;
+                  
+                  let newTotal = Number(p.totalReactions || 0);
+                  const hadReaction = currentReaction && currentReaction !== 'None';
+                  
+                  if (selectedType === 'None' && hadReaction) newTotal -= 1;
+                  else if (!hadReaction) newTotal += 1;
+                  
+                  return {
+                    ...p,
+                    userReaction: selectedType === 'None' ? null : selectedType,
+                    totalReactions: newTotal,
+                  };
+                }));
+                
                 await handleReactionUpdate(item.forum_id, selectedType, item);
-
-
               }}
-
             >
-
               {item.userReaction && item.userReaction !== 'None' ? (
                 <>
                   <Text style={{ fontSize: 15 }}>
@@ -894,56 +728,29 @@ const onViewableItemsChanged = useCallback(({ viewableItems }) => {
                   </Text>
                 </>
               ) : (
-                <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'center', }}>
-                  {/* <Text style={{ fontSize: 12, color: '#777', marginRight: 6 }}>React: </Text> */}
+                <View style={{ alignItems: 'center', flexDirection: 'row' }}>
                   <Icon name="thumb-up-outline" size={20} color="#999" />
-
                 </View>
               )}
 
               <TouchableOpacity
-                onPress={() => {
-                  reactionSheetRef.current?.open(item.forum_id, 'All');
-                }}
+                onPress={() => reactionSheetRef.current?.open(item.forum_id, 'All')}
                 style={{ padding: 5, paddingHorizontal: 10 }}
               >
                 {item.totalReactions > 0 && (
-                  <Text style={{ color: "#666" }}>
-                    ({item.totalReactions})
-                  </Text>
+                  <Text style={{ color: "#666" }}>({item.totalReactions})</Text>
                 )}
               </TouchableOpacity>
             </TouchableOpacity>
 
-
-
+            {/* Reaction popup */}
             {activeReactionForumId === item.forum_id && (
               <>
-                {/* Overlay to catch outside taps */}
                 <TouchableWithoutFeedback onPress={() => setActiveReactionForumId(null)}>
-                  <View
-                    style={{
-                      position: 'absolute',
-                      top: -1000,
-                      left: -1000,
-                      right: -1000,
-                      bottom: -1000,
-                      backgroundColor: 'transparent',
-                      zIndex: 0,
-                    }}
-                  />
+                  <View style={styles.reactionOverlay} />
                 </TouchableWithoutFeedback>
-
-                {/* Container for reactions - added flexDirection: 'row' and other styling */}
-                <View style={{
-                  position: 'absolute',
-                  bottom: 40, // Position above the reaction button
-                  left: 0,
-                  borderRadius: 40,
-                  flexDirection: 'row',
-
-                }}>
-                  {reactionConfig.map(({ type, emoji, label }) => {
+                <View style={styles.reactionContainer}>
+                  {reactionConfig.map(({ type, emoji }) => {
                     const isSelected = item.userReaction === type;
                     return (
                       <TouchableOpacity
@@ -953,14 +760,10 @@ const onViewableItemsChanged = useCallback(({ viewableItems }) => {
                           await handleReactionUpdate(item.forum_id, selectedType, item);
                           setActiveReactionForumId(null);
                         }}
-                        style={{
-                          padding: 8,
-                          margin: 4,
-                          backgroundColor: isSelected ? '#c2d8f0' : '#f0f0f0',
-                          borderRadius: 20,
-                          borderWidth: 1,
-                          borderColor: '#ccc'
-                        }}
+                        style={[
+                          styles.reactionButton,
+                          isSelected && styles.selectedReaction
+                        ]}
                       >
                         <Text style={{ fontSize: 20 }}>{emoji}</Text>
                       </TouchableOpacity>
@@ -970,22 +773,20 @@ const onViewableItemsChanged = useCallback(({ viewableItems }) => {
               </>
             )}
           </View>
-
         </View>
 
-
+        {/* Action buttons */}
         <View style={styles.iconContainer}>
           <View>
             <TouchableOpacity
               style={styles.iconButton}
-              onPress={() => openCommentSheet(item.forum_id, item.user_id, myId,item)}
+              onPress={() => openCommentSheet(item.forum_id, item.user_id, myId, item)}
             >
               <Icon name="comment-outline" size={17} color="#075cab" />
               <Text style={styles.iconTextUnderlined}>
                 Comments{item.commentCount > 0 ? ` ${item.commentCount}` : ''}
               </Text>
             </TouchableOpacity>
-
           </View>
           <View>
             <TouchableOpacity style={styles.iconButton}>
@@ -1000,11 +801,9 @@ const onViewableItemsChanged = useCallback(({ viewableItems }) => {
             </TouchableOpacity>
           </View>
         </View>
-
       </View>
-
     );
-  }, [localPosts, activeVideo, expandedTexts, activeReactionForumId, isTabActive,getMediaForItem, getAuthorImage]);
+  }, [localPosts, activeVideo, expandedTexts, activeReactionForumId, isTabActive, getMediaForItem, getAuthorImage]);
 
 
   const lastCheckedTimeRef = useRef(Math.floor(Date.now() / 1000));
@@ -1390,11 +1189,8 @@ const onViewableItemsChanged = useCallback(({ viewableItems }) => {
               scrollEventThrottle={16}
 
               keyExtractor={(item, index) => `${item.forum_id}-${index}`}
-              onViewableItemsChanged={combinedOnViewableItemsChanged}
-              viewabilityConfig={{
-                ...mediaViewabilityConfig,
-                ...viewabilityConfig
-              }}
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
             
             
               refreshControl={
@@ -1519,14 +1315,12 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
     const reactionListener = EventRegister.addEventListener(
       'onForumReactionUpdated',
       ({ forum_id, reaction_type }) => {
-        console.log('[Reaction Event] Received:', { forum_id, reaction_type });
-
+      
         setLocalPosts(prev => {
           return prev.map(post => {
             if (post.forum_id !== forum_id) return post;
 
-            console.log('[Reaction Update] Updating post:', post.forum_id);
-
+  
             let newTotal = Number(post.totalReactions || 0);
             let newReaction = reaction_type;
 
@@ -1539,8 +1333,7 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
             } else if (!hadReaction) {
               newTotal += 1;
             } else if (oldReaction !== reaction_type) {
-              // Reaction changed (e.g., Like -> Love), count remains
-              console.log('[Reaction Update] Changed from', oldReaction, 'to', reaction_type);
+            
             }
 
             const updatedPost = {
@@ -1549,8 +1342,7 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
               totalReactions: newTotal,
             };
 
-            console.log('[Reaction Update] Updated post:', updatedPost);
-
+       
             return updatedPost;
           });
         });
@@ -1807,7 +1599,6 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
 
 
   const openCommentSheet = (forum_id, user_id, myId,item) => {
-    console.log('[Comment Sheet] Opening for forum_id:', forum_id, 'user_id:', myId);
 
     openSheet(
       <View style={{ flex: 1, backgroundColor: 'white' }}>
@@ -1816,7 +1607,7 @@ const LatestPosts = ({ scrollRef, videoRefs, isTabActive }) => {
           currentUserId={myId}
           ref={commentSectionRef}
           closeBottomSheet={() => {
-            console.log('[Comment Sheet] Closing sheet');
+   
             bottomSheetRef.current?.scrollTo(0);
           }}
         />
@@ -3354,6 +3145,24 @@ const styles = StyleSheet.create({
   label: {
     fontWeight: '600',
     textTransform: 'capitalize',
+  },
+reactionContainer: {
+    position: 'absolute',
+    bottom: 40,
+    left: 0,
+    borderRadius: 40,
+    flexDirection: 'row',
+  },
+  reactionButton: {
+    padding: 8,
+    margin: 4,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#ccc'
+  },
+  selectedReaction: {
+    backgroundColor: '#c2d8f0',
   },
 
 

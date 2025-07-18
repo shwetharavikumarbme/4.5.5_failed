@@ -17,6 +17,7 @@ import AppStyles from '../../assets/AppStyles';
 import { getSignedUrl, highlightMatch, useLazySignedUrls } from '../helperComponents.jsx/signedUrls';
 import buliding from '../../images/homepage/buliding.jpg';
 import { EventRegister } from 'react-native-event-listeners';
+import { generateAvatarFromName } from '../helperComponents.jsx/useInitialsAvatar';
 const Company = Image.resolveAssetSource(buliding).uri;
 
 
@@ -87,14 +88,18 @@ const JobListScreen = () => {
         const signedMap = await getSignedUrl(newPost.post_id, newPost.fileKey || '');
         const imageUrl = signedMap[newPost.post_id] || Company;
 
-        const jobWithImage = { ...newPost, imageUrl };
+        const jobWithImage = {
+          ...newPost,
+          imageUrl,
+          companyAvatar: generateAvatarFromName(newPost.company_name)
+        };
 
         setLocalJobs(prevJobs => {
           const filtered = prevJobs.filter(job => job.post_id !== jobWithImage.post_id);
           return [jobWithImage, ...filtered];
         });
       } catch (err) {
-
+        // Error handling
       }
     };
 
@@ -105,7 +110,11 @@ const JobListScreen = () => {
         const signedMap = await getSignedUrl(updatedPost.post_id, updatedPost.fileKey || '');
         const imageUrl = signedMap[updatedPost.post_id] || Company;
 
-        const updatedJobWithImage = { ...updatedPost, imageUrl };
+        const updatedJobWithImage = {
+          ...updatedPost,
+          imageUrl,
+          companyAvatar: generateAvatarFromName(updatedPost.company_name)
+        };
 
         setLocalJobs(prevJobs =>
           prevJobs.map(job =>
@@ -113,7 +122,7 @@ const JobListScreen = () => {
           )
         );
       } catch (err) {
-
+        // Error handling
       }
     };
 
@@ -294,13 +303,25 @@ const JobListScreen = () => {
         return;
       }
 
+      // Only add avatar data to jobs that don't have a fileKey
+      const jobsWithAvatars = jobs.map(job => {
+        // If fileKey exists, return the job as-is
+        if (job.fileKey) {
+          return job;
+        }
+        // Otherwise, add generated avatar
+        return {
+          ...job,
+          companyAvatar: generateAvatarFromName(job.company_name)
+        };
+      });
+
       // Append new jobs to localJobs state
       setLocalJobs(prevJobs => {
         const existingIds = new Set(prevJobs.map(job => job.post_id));
-        const newUniqueJobs = jobs.filter(job => !existingIds.has(job.post_id));
+        const newUniqueJobs = jobsWithAvatars.filter(job => !existingIds.has(job.post_id));
         return [...prevJobs, ...newUniqueJobs];
       });
-
 
       setLastEvaluatedKey(res.data.lastEvaluatedKey || null);
       setHasMoreJobs(!!res.data.lastEvaluatedKey);
@@ -313,7 +334,7 @@ const JobListScreen = () => {
       }
 
     } catch (error) {
-
+      // Error handling
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -378,7 +399,6 @@ const JobListScreen = () => {
   };
 
 
-
   const handleSearch = useCallback(async (text) => {
     if (!isConnected) {
       showToast('No internet connection', 'error');
@@ -402,30 +422,39 @@ const JobListScreen = () => {
       const jobs = res.data.response || [];
       flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
 
-      // Get signed URLs
-      const urlPromises = jobs.map(job =>
+      // Get signed URLs only for jobs that have fileKey
+      const jobsWithFileKey = jobs.filter(job => job.fileKey);
+      const urlPromises = jobsWithFileKey.map(job =>
         getSignedUrl(job.post_id, job.fileKey)
       );
 
       const signedUrlsArray = await Promise.all(urlPromises);
       const rawSignedUrlMap = Object.assign({}, ...signedUrlsArray);
 
-      // Embed imageUrl into each job
-      const jobsWithImage = jobs.map(job => ({
-        ...job,
-        imageUrl: rawSignedUrlMap[job.post_id] || Company,
-      }));
+      // Embed imageUrl and avatar into each job
+      const jobsWithImage = jobs.map(job => {
+        const baseJob = {
+          ...job,
+          // Only set imageUrl if fileKey exists and we got a signed URL
+          imageUrl: job.fileKey ? (rawSignedUrlMap[job.post_id] || Company) : null,
+        };
+
+        // Only generate avatar if no fileKey exists
+        return job.fileKey ? baseJob : {
+          ...baseJob,
+          companyAvatar: generateAvatarFromName(job.company_name)
+        };
+      });
 
       setSearchResults(jobsWithImage);
 
     } catch (error) {
-
+      console.error('Search error:', error);
+      showToast('Failed to perform search', 'error');
     } finally {
       setSearchTriggered(true);
-
     }
   }, [isConnected]);
-
 
   const debounceTimeout = useRef(null);
 
@@ -497,15 +526,25 @@ const JobListScreen = () => {
           onPress={() => navigateToDetails(job)}
           activeOpacity={1}
         >
-          <View style={styles.cardImage1}>
-            <FastImage
-              source={{ uri: imageUrl, priority: FastImage.priority.normal }}
-              cache="immutable"
-              style={styles.cardImage}
-              resizeMode={resizeMode}
-              onError={() => { }}
-            />
+          <View style={AppStyles.cardImage1}>
+            {imageUrl ? (
+              <FastImage
+                source={{ uri: imageUrl, priority: FastImage.priority.normal }}
+                cache="immutable"
+                style={AppStyles.cardImage}
+                resizeMode={resizeMode}
+                onError={() => { }}
+              />
+            ) : (
+              <View style={[AppStyles.avatarContainer, { backgroundColor: job.companyAvatar?.backgroundColor }]}>
+                <Text style={[AppStyles.avatarText, { color: job.companyAvatar?.textColor }]}>
+                  {job.companyAvatar?.initials}
+                </Text>
+              </View>
+            )}
           </View>
+
+
 
           <View style={styles.textContainer}>
             <Text numberOfLines={1} style={styles.title1}>
@@ -836,23 +875,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
 
-  cardImage1: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-    alignSelf: 'center',
-    marginBottom: 20,
-    marginTop: 10,
-  },
-
-  cardImage: {
-    width: '100%',
-    height: '100%',
-  },
-
+  
   textContainer: {
     paddingHorizontal: 16,
     paddingBottom: 16,
